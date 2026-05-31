@@ -1,0 +1,87 @@
+\documentclass[12pt,a4paper]{report}
+\usepackage[utf-8]{inputenc}
+\usepackage[margin=1in]{geometry}
+\usepackage{graphicx}
+\usepackage{amsmath}
+\usepackage{amssymb}
+\usepackage{setspace}
+\usepackage{fancyhdr}
+\usepackage{hyperref}
+\usepackage{booktabs}
+\usepackage{float}
+\usepackage{caption}
+\usepackage{subcaption}
+\usepackage{xcolor}
+
+% Set line spacing
+\onehalfspacing
+
+% Header and footer
+\pagestyle{fancy}
+\fancyhf{}
+\rhead{\thepage}
+\lhead{\leftmark}
+
+% Title page setup
+\title{EFFECT OF FEATURE SELECTION ON CLASSIFICATION ACCURACY ON HIGH-DIMENSIONAL GENE EXPRESSION DATA}
+\author{DARKO SAMUEL AND AKYEN SAMUEL}
+\date{}
+
+\begin{document}
+
+% ============================================================
+% TITLE PAGE
+% ============================================================
+\begin{titlepage}
+    \centering
+    \vspace*{0.5cm}
+
+    {\Large\textbf{KWAME NKRUMAH UNIVERSITY OF SCIENCE AND TECHNOLOGY, KUMASI}}
+
+    \vspace{1.5cm}
+
+    % University Logo (adjust path as needed)
+    \begin{center}
+        \includegraphics[width=3cm]{knust_logo.png}
+    \end{center}
+
+    \vspace{1.5cm}
+
+    {\Large\textbf{EFFECT OF FEATURE SELECTION ON CLASSIFICATION ACCURACY ON HIGH-DIMENSIONAL GENE EXPRESSION DATA}}
+
+    \vspace{2cm}
+
+    {\textbf{BY}}
+
+    \vspace{0.5cm}
+
+    {\textbf{DARKO SAMUEL AND AKYEN SAMUEL}}
+
+    \vspace{3cm}
+
+    {\normalsize A PROJECT REPORT SUBMITTED TO THE DEPARTMENT OF MATHEMATICS, KWAME NKRUMAH UNIVERSITY OF SCIENCE AND TECHNOLOGY IN PARTIAL FULFILLMENT OF THE REQUIREMENT FOR THE DEGREE OF BSc. MATHEMATICS}
+
+    \vfill
+
+    \today
+
+\end{titlepage}
+
+% ============================================================
+% TABLE OF CONTENTS
+% ============================================================
+\tableofcontents
+\newpage
+
+% ============================================================
+% CHAPTERS
+% ============================================================
+\input{chapters/chapter1_introduction}
+\newpage
+
+\input{chapters/chapter2_methodology}
+\newpage
+
+\input{chapters/chapter3_results}
+
+\end{document}

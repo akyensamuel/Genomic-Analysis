@@ -1,0 +1,102 @@
+\chapter{Introduction}
+
+\section{Background}
+
+Inside every cell, DNA contains genes that serve as instructions for cellular activity. However, not all genes are active at the same time. When a gene is active, the cell produces RNA from it, and that level of activity is termed \textit{gene expression}. In essence, gene expression answers the question: ``How active is this gene in this sample?''
+
+Gene expression refers to the process by which genetic information encoded in DNA is transcribed into RNA, ultimately influencing protein production and cellular function. In disease studies, gene expression profiling is widely used to identify molecular differences between healthy and diseased samples. Advances in high-throughput sequencing technologies, particularly RNA sequencing (RNA-seq), have enabled large-scale measurement of gene expression levels across biological samples.
+
+A typical gene expression dataset consists of thousands of genes (features) and a very small number of samples. This imbalance creates what is commonly known as the ``high-dimensional, low-sample-size'' problem. In such settings, machine learning algorithms often struggle to generalize effectively due to overfitting and the curse of dimensionality. Consequently, dimensionality reduction techniques, particularly feature selection methods, are essential for improving model performance and interpretability.
+
+\section{High-Dimensional Data}
+
+High-dimensional data refers to datasets where each observation (sample) is described by a large number of variables (features, dimensions, or explanatory variables) relative to what is typical or convenient for analysis. In the simplest terms, it means data with a large number of attributes or features---for example, thousands of genes measured across only a few samples.
+
+\subsection{The ``Small $n$, Large $p$'' Problem}
+
+High-dimensional data occurs when the number of features ($p$) greatly exceeds the number of samples ($n$). In genomic datasets, this typically means:
+\begin{itemize}
+    \item \textbf{High $p$:} Thousands of genes (dimensions).
+    \item \textbf{Small $n$:} Often fewer than 100 clinical samples.
+\end{itemize}
+
+The \textit{Curse of Dimensionality}: With too many features, distances between data points become meaningless, and models can find ``patterns'' in pure noise, leading to overfitting.
+
+\subsection{Why High-Dimensional Data is a Problem}
+
+Machine learning models trained on high-dimensional data commonly suffer from the following issues:
+\begin{itemize}
+    \item \textbf{Overfitting:} The model memorizes noise instead of learning genuine patterns.
+    \item \textbf{Curse of Dimensionality:} Too many features cause distances between points to become meaningless.
+    \item \textbf{Slow Training:} Unnecessary information makes the training process slow and often inaccurate.
+    \item \textbf{Poor Generalization:} Models fail to perform well on unseen data.
+\end{itemize}
+
+\section{Feature Selection}
+
+Feature selection involves identifying the most important genes for prediction. It serves to reduce noise, improve model performance, prevent overfitting, and enhance the interpretability of results.
+
+\subsection{Types of Feature Selection Methods}
+
+\subsubsection{Filter Methods}
+
+Filter methods use statistical techniques to evaluate which genes differ most between disease and healthy samples, independently of any learning algorithm. Examples include the $t$-test, ANOVA, correlation analysis, and mutual information.
+
+\paragraph{Univariate Analysis.} Each gene is evaluated independently using measures such as:
+\begin{itemize}
+    \item \textbf{Variance Thresholding:} Genes with near-zero variance are removed.
+    \item \textbf{Differential Expression (DE):} Genes are ranked by a two-sample $t$-statistic:
+    \begin{equation}
+        t = \frac{\bar{x}_1 - \bar{x}_2}{\sqrt{\frac{s_1^2}{n_1} + \frac{s_2^2}{n_2}}}
+    \end{equation}
+\end{itemize}
+
+\paragraph{Limitation:} Filter methods ignore gene-gene interactions (epistasis).
+
+\subsubsection{Wrapper Methods}
+
+Wrapper methods use a machine learning model to evaluate subsets of genes. A typical example is Recursive Feature Elimination (RFE), which follows this iterative process:
+\begin{center}
+    Train model $\rightarrow$ Rank features $\rightarrow$ Remove least important $\rightarrow$ Repeat
+\end{center}
+
+\paragraph{Recursive Feature Elimination (RFE).} The RFE mechanism proceeds as follows:
+\begin{enumerate}
+    \item Train a model (SVM or Random Forest) on all genes.
+    \item Rank genes by importance (weights or Gini impurity).
+    \item Remove the $k$ least important genes.
+    \item Repeat until the optimal subset size is reached.
+\end{enumerate}
+
+RFE captures inter-gene dependencies but is computationally expensive.
+
+\subsubsection{Embedded Methods}
+
+In embedded methods, feature selection occurs as part of the model training process. The model itself decides which genes are important. Common examples include LASSO and Random Forest feature importance.
+
+\paragraph{L1 Regularization (LASSO).} LASSO (Least Absolute Shrinkage and Selection Operator) is the industry standard for embedded feature selection:
+\begin{equation}
+    \min_{\beta} \left\{ \|y - X\beta\|_2^2 + \lambda \|\beta\|_1 \right\}
+\end{equation}
+
+The $L_1$ penalty forces coefficients of irrelevant genes to exactly zero, effectively selecting a sparse gene list. The hyperparameter $\lambda$ controls the degree of sparsity.
+
+\section{Problem Statement}
+
+Gene expression datasets contain thousands of gene features but relatively few samples. This high dimensionality can negatively affect classification performance by increasing model variance, promoting overfitting, introducing noise from irrelevant or redundant features, and poor generalization in classification tasks. While feature selection is commonly used to address this issue, it is not always clear which feature selection techniques most effectively improve classification accuracy on high-dimensional gene expression data.
+
+\section{Aim and Objectives}
+
+\subsection{Aim}
+
+The aim of this study is to investigate the effect of different feature selection techniques on classification accuracy in high-dimensional gene expression datasets.
+
+\subsection{Objectives}
+
+\begin{itemize}
+    \item To analyze the structure and characteristics of bulk RNA-seq gene expression data.
+    \item To implement various feature selection methods, including filter, wrapper, and embedded approaches.
+    \item To train machine learning classification models using features selected by each method.
+    \item To evaluate and compare classification performance using appropriate metrics.
+    \item To assess the extent to which dimensionality reduction improves model generalization.
+\end{itemize}

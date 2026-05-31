@@ -1,0 +1,168 @@
+\chapter{Methodology}
+
+\section{Dataset Description}
+
+This study utilized the GSE19804 lung cancer gene expression dataset from the NCBI Gene Expression Omnibus (GEO) database. The dataset comprises:
+\begin{itemize}
+    \item \textbf{Total Samples:} 120 (60 cancer, 60 normal)
+    \item \textbf{Total Features:} 54,675 genes (probes)
+    \item \textbf{Data Type:} Bulk RNA-seq microarray expression values
+\end{itemize}
+
+The balanced class distribution (60-60) provides an ideal scenario for evaluating feature selection methods without accounting for class imbalance bias in the initial stages.
+
+\section{Data Preprocessing and Normalization}
+
+Raw gene expression data is typically exponentially distributed and contains substantial noise. We applied two critical preprocessing transformations:
+
+\subsection{Log2 Transformation}
+
+The raw expression values $x$ are transformed as:
+\begin{equation}
+    y = \log_2(x + 1)
+\end{equation}
+
+\textbf{Justification:}
+\begin{itemize}
+    \item Compresses the massive range of expression values
+    \item Stabilizes variance, making data more additive
+    \item Reduces right-skewness inherent in biological data
+\end{itemize}
+
+\subsection{Standardization (Z-score Normalization)}
+
+Following log transformation, we apply standardization:
+\begin{equation}
+    z = \frac{x - \mu}{\sigma}
+\end{equation}
+
+where $\mu$ is the mean and $\sigma$ is the standard deviation across all samples for each gene.
+
+\textbf{Justification:}
+\begin{itemize}
+    \item Shifts the mean to 0 and standard deviation to 1
+    \item Required for LASSO and SVM to ensure genes with high absolute values do not dominate
+    \item Improves numerical stability in optimization algorithms
+\end{itemize}
+
+\section{Feature Selection Methods}
+
+We implemented and compared three fundamental feature selection approaches:
+
+\subsection{Filter Methods}
+
+\subsubsection{Welch's Independent Two-Sample T-Test}
+
+For each gene $j$, we computed the $t$-statistic comparing cancer versus normal samples:
+\begin{equation}
+    t_j = \frac{\bar{x}_{c,j} - \bar{x}_{n,j}}{\sqrt{\frac{s_{c,j}^2}{n_c} + \frac{s_{n,j}^2}{n_n}}}
+\end{equation}
+
+where:
+\begin{itemize}
+    \item $\bar{x}_{c,j}$ and $\bar{x}_{n,j}$ are mean expressions in cancer and normal groups
+    \item $s_{c,j}^2$ and $s_{n,j}^2$ are sample variances
+    \item $n_c = 60$ and $n_n = 60$ are sample sizes per group
+\end{itemize}
+
+Welch's variant does not assume equal variances ($\sigma_c^2 \neq \sigma_n^2$), which is realistic for cancer data where diseased tissue exhibits higher genetic heterogeneity.
+
+\textbf{Output:} Genes ranked by $p$-value (smallest first). Top 20 genes selected.
+
+\subsubsection{ANOVA F-Test}
+
+The $F$-statistic evaluates the ratio of variance explained by group membership to variance within groups:
+\begin{equation}
+    F_j = \frac{\text{MS}_{\text{between}}}{\text{MS}_{\text{within}}}
+\end{equation}
+
+where:
+\begin{itemize}
+    \item $\text{MS}_{\text{between}}$ = variance explained by cancer vs. normal distinction
+    \item $\text{MS}_{\text{within}}$ = variance within each group (noise)
+\end{itemize}
+
+\textbf{Advantage:} ANOVA penalizes features with high intra-class variance, prioritizing genes with consistent, homogeneous expression within each group.
+
+\textbf{Output:} Genes ranked by $F$-score (highest first). Top 20 genes selected.
+
+\subsection{Wrapper Methods}
+
+\subsubsection{SVM-based Recursive Feature Elimination (RFE)}
+
+Algorithm:
+\begin{enumerate}
+    \item Pre-filter to top 500 genes (using Welch's $t$-test results) to reduce computational cost
+    \item Train a Linear SVM classifier: $\min_w \frac{1}{2}\|w\|^2 + C \sum_{i=1}^{n} \xi_i$
+    \item Compute feature importance: $|w_j|$ (absolute coefficient magnitude)
+    \item Remove the $k=10$ genes with smallest $|w_j|$
+    \item Repeat until 20 genes remain
+\end{enumerate}
+
+\textbf{Output:} 20 genes selected by iterative SVM-based elimination.
+
+\subsubsection{Random Forest-based RFE}
+
+Algorithm:
+\begin{enumerate}
+    \item Initialize Random Forest with 100 trees
+    \item Compute feature importance using Gini impurity: higher if a gene reduces impurity across trees
+    \item Remove the $k=10$ genes with lowest importance scores
+    \item Repeat until 20 genes remain
+\end{enumerate}
+
+\textbf{Output:} 20 genes selected. Captures non-linear gene-gene interactions missed by SVM.
+
+\subsection{Embedded Methods}
+
+\subsubsection{LASSO (L1-Regularized Logistic Regression)}
+
+We trained a Logistic Regression model with L1 penalty:
+\begin{equation}
+    \min_{\beta} \left\{ -\frac{1}{n}\sum_{i=1}^{n} \left[y_i \log(\sigma(X_i \beta)) + (1-y_i) \log(1 - \sigma(X_i \beta))\right] + \lambda \|\beta\|_1 \right\}
+\end{equation}
+
+where:
+\begin{itemize}
+    \item $\sigma(\cdot)$ is the sigmoid function
+    \item $\lambda$ is the regularization strength (set to $\lambda = 0.1$)
+    \item The $L_1$ penalty forces $\beta_j = 0$ for irrelevant genes
+\end{itemize}
+
+\textbf{Output:} Automatically selects genes with non-zero coefficients (33 genes retained).
+
+\section{Evaluation Metrics}
+
+We evaluated all feature subsets using two primary metrics:
+
+\subsection{Matthews Correlation Coefficient (MCC)}
+
+MCC is a balanced metric suitable for imbalanced datasets:
+\begin{equation}
+    \text{MCC} = \frac{TP \times TN - FP \times FN}{\sqrt{(TP+FP)(TP+FN)(TN+FP)(TN+FN)}}
+\end{equation}
+
+Range: $[-1, 1]$ where:
+\begin{itemize}
+    \item $+1$ = perfect prediction
+    \item $0$ = no better than random
+    \item $-1$ = perfect anti-prediction
+\end{itemize}
+
+\subsection{Cross-Validation Strategy}
+
+We used 5-fold stratified cross-validation to ensure:
+\begin{itemize}
+    \item Balanced class distribution in each fold
+    \item Robust performance estimates
+    \item Detection of overfitting
+\end{itemize}
+
+\section{Comparative Analysis: Feature Overlap}
+
+To understand the consensus among methods, we computed set intersections across the top 20 genes from each method:
+\begin{itemize}
+    \item \textbf{Filter Consensus:} $|T\text{-test} \cap \text{ANOVA}|$ (how much do statistical tests agree?)
+    \item \textbf{Wrapper Consensus:} $|\text{SVM-RFE} \cap \text{RF-RFE}|$ (how much do ML models agree?)
+    \item \textbf{Universal Consensus:} $|T\text{-test} \cap \text{ANOVA} \cap \text{SVM-RFE} \cap \text{RF-RFE}|$ (gold-standard genes)
+\end{itemize}
