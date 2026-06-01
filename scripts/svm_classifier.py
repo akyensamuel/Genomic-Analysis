@@ -23,24 +23,40 @@ from sklearn.preprocessing import StandardScaler
 import matplotlib.pyplot as plt
 import seaborn as sns
 
-results_dir = os.path.join(os.path.dirname(__file__), '../results')
-os.makedirs(results_dir, exist_ok=True)
-
 # Add scripts directory to path
 sys.path.insert(0, os.path.dirname(__file__))
 
 from preprocessing import GenomicDataProcessor
 from feature_selection import FeatureSelector
 
-# Setup logging
-logging.basicConfig(
-    level=logging.INFO,
-    format='%(asctime)s - %(levelname)s - %(message)s',
-    handlers=[
-        logging.FileHandler(os.path.join(os.path.dirname(__file__), '../results', 'svm_training.log')),
-        logging.StreamHandler()
-    ]
-)
+# Build DATASET_INFO dynamically from preprocessing.dataset_config
+def build_dataset_info():
+    """Build dataset info from preprocessor config"""
+    processor = GenomicDataProcessor()
+    dataset_info = {}
+
+    for dataset_name, config in processor.dataset_config.items():
+        total = config['n_cancer'] + config['n_normal']
+        balance = "balanced" if config['n_cancer'] == config['n_normal'] else "imbalanced"
+
+        # Identify cancer type
+        cancer_type = "Unknown"
+        if "19804" in dataset_name:
+            cancer_type = "Lung Cancer"
+        elif "42568" in dataset_name:
+            cancer_type = "Breast Cancer"
+
+        dataset_info[dataset_name] = {
+            "name": cancer_type,
+            "description": f"{dataset_name} - {cancer_type} ({balance}: {config['n_cancer']}/{config['n_normal']}, {total} total)",
+            "folder": f"{dataset_name}_{cancer_type.lower().replace(' ', '_')}"
+        }
+
+    return dataset_info
+
+DATASET_INFO = build_dataset_info()
+
+# Setup logging (will be configured per dataset)
 logger = logging.getLogger(__name__)
 
 
@@ -60,11 +76,21 @@ class SVMClassifierWithCV:
         self.n_splits = n_splits
         self.random_state = random_state
 
-        # Create results directory
-        self.results_dir = os.path.join(
+        # Create dataset-specific results directory
+        base_results_dir = os.path.join(
             os.path.dirname(__file__), '..', 'results'
         )
+        os.makedirs(base_results_dir, exist_ok=True)
+
+        # Get dataset info
+        dataset_info = DATASET_INFO.get(dataset_name, {})
+        self.dataset_folder = dataset_info.get('folder', dataset_name)
+
+        self.results_dir = os.path.join(base_results_dir, self.dataset_folder)
         os.makedirs(self.results_dir, exist_ok=True)
+
+        # Setup logging for this dataset
+        self._setup_logging()
 
         # Load data
         self.X = None
@@ -75,6 +101,23 @@ class SVMClassifierWithCV:
             'path_a': {},  # Baseline
             'path_b': {}   # Optimized
         }
+
+    def _setup_logging(self):
+        """Setup dataset-specific logging"""
+        log_file = os.path.join(self.results_dir, 'svm_training.log')
+
+        # Remove old handlers
+        logger.handlers = []
+
+        # Add new handlers for this dataset
+        logging.basicConfig(
+            level=logging.INFO,
+            format='%(asctime)s - %(levelname)s - %(message)s',
+            handlers=[
+                logging.FileHandler(log_file),
+                logging.StreamHandler()
+            ]
+        )
 
     def _load_data(self):
         """Load preprocessed data or preprocess if needed"""
@@ -282,19 +325,24 @@ class SVMClassifierWithCV:
         logger.info("="*70)
 
         comparison = {}
-        summary_a = self.results['path_a']['summary']
+        summary_a = self.results['path_a'].get('summary', {})
 
         for key, value_b in self.results.items():
-            if key.startswith('path_b'):
+            if key.startswith('path_b') and 'summary' in value_b:
                 summary_b = value_b['summary']
 
+                # Safe division with fallback
+                accuracy_improvement = ((summary_b['accuracy_mean'] - summary_a['accuracy_mean']) /
+                                       summary_a['accuracy_mean'] * 100) if summary_a['accuracy_mean'] != 0 else 0
+                mcc_improvement = ((summary_b['mcc_mean'] - summary_a['mcc_mean']) /
+                                  summary_a['mcc_mean'] * 100) if summary_a['mcc_mean'] != 0 else 0
+                f1_improvement = ((summary_b['f1_mean'] - summary_a['f1_mean']) /
+                                 summary_a['f1_mean'] * 100) if summary_a['f1_mean'] != 0 else 0
+
                 improvement = {
-                    'accuracy': ((summary_b['accuracy_mean'] - summary_a['accuracy_mean']) /
-                                summary_a['accuracy_mean'] * 100),
-                    'mcc': ((summary_b['mcc_mean'] - summary_a['mcc_mean']) /
-                           summary_a['mcc_mean'] * 100),
-                    'f1': ((summary_b['f1_mean'] - summary_a['f1_mean']) /
-                          summary_a['f1_mean'] * 100),
+                    'accuracy': accuracy_improvement,
+                    'mcc': mcc_improvement,
+                    'f1': f1_improvement,
                 }
 
                 comparison[key] = improvement
@@ -341,9 +389,14 @@ class SVMClassifierWithCV:
 
     def run_full_pipeline(self):
         """Run complete training pipeline"""
+        dataset_info = DATASET_INFO.get(self.dataset_name, {})
+
         logger.info("\n" + "="*70)
         logger.info("STARTING SVM CLASSIFIER PIPELINE")
-        logger.info(f"Dataset: {self.dataset_name}")
+        logger.info("="*70)
+        logger.info(f"Dataset: {dataset_info.get('name', self.dataset_name)}")
+        logger.info(f"Description: {dataset_info.get('description', '')}")
+        logger.info(f"Results Directory: {self.results_dir}")
         logger.info(f"Folds: {self.n_splits}-Fold Cross-Validation")
         logger.info("="*70)
 
@@ -366,12 +419,13 @@ class SVMClassifierWithCV:
 
         logger.info("\n" + "="*70)
         logger.info("PIPELINE COMPLETE")
+        logger.info(f"Results saved to: {self.results_dir}")
         logger.info("="*70)
 
 
 def main():
     """Main execution"""
-    classifier = SVMClassifierWithCV(dataset_name="GSE19804", n_splits=5)
+    classifier = SVMClassifierWithCV(dataset_name="GSE42568", n_splits=5)
     classifier.run_full_pipeline()
 
 

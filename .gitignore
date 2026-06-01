@@ -1,4 +1,6 @@
+# ============================================================
 # LaTeX Build Files
+# ============================================================
 *.aux
 *.bbl
 *.blg
@@ -25,7 +27,9 @@ main.pdf
 # MiKTeX specific
 *.miktex
 
+# ============================================================
 # Python
+# ============================================================
 __pycache__/
 *.py[cod]
 *$py.class
@@ -55,6 +59,7 @@ venv/
 ENV/
 env/
 .venv
+virtualEnvironment/
 
 # IDE and Editor
 .vscode/
@@ -69,18 +74,34 @@ Thumbs.db
 .ipynb_checkpoints/
 *.ipynb_checkpoints
 
-# Data directories (can be large)
+# ============================================================
+# Data directories (LARGE FILES - ignore)
+# ============================================================
 datasets/
 preprocessed_datasets/
 
-# Project-specific
+# Project-specific data files
 *.pickle
 *.pkl
 *.npy
 *.npz
 *.h5
 
+# ============================================================
+# Results (ORGANIZED BY DATASET)
+# ============================================================
+# Ignore large result files but track README structure
+results/GSE19804_lung_cancer/*.json
+results/GSE19804_lung_cancer/*.csv
+results/GSE19804_lung_cancer/*.log
+
+results/GSE42568_breast_cancer/*.json
+results/GSE42568_breast_cancer/*.csv
+results/GSE42568_breast_cancer/*.log
+
+# ============================================================
 # OS specific
+# ============================================================
 .DS_Store
 .AppleDouble
 .LSOverride
@@ -96,4 +117,3 @@ htmlcov/
 .project
 .pydevproject
 *.bak
-*.tmp
