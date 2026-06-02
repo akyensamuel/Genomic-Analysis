@@ -4,59 +4,61 @@ Implements dual-track training: Baseline (Path A) vs Optimized (Path B)
 Prevents data leakage by applying feature selection INSIDE training folds
 """
 
-import os
+import json
+import logging
 import sys
+from datetime import datetime
+from pathlib import Path
+
 import numpy as np
 import pandas as pd
-import logging
-from datetime import datetime
-import json
-
-from sklearn.model_selection import StratifiedKFold, cross_validate
-from sklearn.svm import SVC
 from sklearn.metrics import (
-    confusion_matrix, accuracy_score, precision_score, recall_score,
-    f1_score, matthews_corrcoef, roc_auc_score, roc_curve, auc,
-    classification_report, make_scorer
+    accuracy_score,
+    confusion_matrix,
+    f1_score,
+    matthews_corrcoef,
+    precision_score,
+    recall_score,
+    roc_auc_score,
 )
-from sklearn.preprocessing import StandardScaler
-import matplotlib.pyplot as plt
-import seaborn as sns
+from sklearn.model_selection import StratifiedKFold
+from sklearn.svm import SVC
 
-# Add scripts directory to path
-sys.path.insert(0, os.path.dirname(__file__))
+# Modern path injection
+current_dir = Path(__file__).resolve().parent
+if str(current_dir) not in sys.path:
+    sys.path.insert(0, str(current_dir))
 
-from preprocessing import GenomicDataProcessor
 from feature_selection import FeatureSelector
+from preprocessing import GenomicDataProcessor
 
-# Build DATASET_INFO dynamically from preprocessing.dataset_config
+
 def build_dataset_info():
-    """Build dataset info from preprocessor config"""
+    """
+    Build dataset info dynamically from preprocessor config.
+    Eliminates all hardcoded string matching.
+    """
     processor = GenomicDataProcessor()
     dataset_info = {}
 
     for dataset_name, config in processor.dataset_config.items():
-        total = config['n_cancer'] + config['n_normal']
-        balance = "balanced" if config['n_cancer'] == config['n_normal'] else "imbalanced"
+        total = config["n_cancer"] + config["n_normal"]
+        balance = "balanced" if config["n_cancer"] == config["n_normal"] else "imbalanced"
 
-        # Identify cancer type
-        cancer_type = "Unknown"
-        if "19804" in dataset_name:
-            cancer_type = "Lung Cancer"
-        elif "42568" in dataset_name:
-            cancer_type = "Breast Cancer"
+        # Safely fetch the cancer type defined in preprocessing.py
+        cancer_type = config.get("cancer_type", "Unknown Cancer")
 
         dataset_info[dataset_name] = {
             "name": cancer_type,
             "description": f"{dataset_name} - {cancer_type} ({balance}: {config['n_cancer']}/{config['n_normal']}, {total} total)",
-            "folder": f"{dataset_name}_{cancer_type.lower().replace(' ', '_')}"
+            "folder": f"{dataset_name}_{cancer_type.lower().replace(' ', '_')}",
         }
 
     return dataset_info
 
-DATASET_INFO = build_dataset_info()
 
-# Setup logging (will be configured per dataset)
+# Build DATASET_INFO dynamically at runtime
+DATASET_INFO = build_dataset_info()
 logger = logging.getLogger(__name__)
 
 
@@ -65,366 +67,324 @@ class SVMClassifierWithCV:
 
     def __init__(self, dataset_name="GSE19804", n_splits=5, random_state=42):
         """
-        Initialize SVM classifier
-
-        Args:
-            dataset_name (str): "GSE42568" or "GSE19804"
-            n_splits (int): Number of CV folds
-            random_state (int): Random seed for reproducibility
+        Initialize SVM classifier framework using OOP standard paths.
         """
         self.dataset_name = dataset_name
         self.n_splits = n_splits
         self.random_state = random_state
 
-        # Create dataset-specific results directory
-        base_results_dir = os.path.join(
-            os.path.dirname(__file__), '..', 'results'
-        )
-        os.makedirs(base_results_dir, exist_ok=True)
-
-        # Get dataset info
+        # Pure Pathlib directory parsing
+        base_dir = Path(__file__).resolve().parent.parent
         dataset_info = DATASET_INFO.get(dataset_name, {})
-        self.dataset_folder = dataset_info.get('folder', dataset_name)
+        self.dataset_folder = dataset_info.get("folder", dataset_name)
 
-        self.results_dir = os.path.join(base_results_dir, self.dataset_folder)
-        os.makedirs(self.results_dir, exist_ok=True)
+        self.results_dir = base_dir / "results" / self.dataset_folder
+        self.results_dir.mkdir(parents=True, exist_ok=True)
 
-        # Setup logging for this dataset
+        # Setup logging for this specific run
         self._setup_logging()
 
-        # Load data
+        # Placeholders for data arrays
         self.X = None
         self.y = None
-        self._load_data()
+        self._load_data(base_dir)
 
-        self.results = {
-            'path_a': {},  # Baseline
-            'path_b': {}   # Optimized
-        }
+        self.results = {"path_a": {}, "path_b": {}}
 
     def _setup_logging(self):
-        """Setup dataset-specific logging"""
-        log_file = os.path.join(self.results_dir, 'svm_training.log')
+        """Setup dataset-specific logging configurations"""
+        log_file = self.results_dir / "svm_training.log"
 
-        # Remove old handlers
-        logger.handlers = []
+        # Clear existing logging handles safely
+        for handler in logging.root.handlers[:]:
+            logging.root.removeHandler(handler)
+        for handler in logger.handlers[:]:
+            logger.removeHandler(handler)
 
-        # Add new handlers for this dataset
-        logging.basicConfig(
-            level=logging.INFO,
-            format='%(asctime)s - %(levelname)s - %(message)s',
-            handlers=[
-                logging.FileHandler(log_file),
-                logging.StreamHandler()
-            ]
-        )
+        file_handler = logging.FileHandler(log_file, mode="w")
+        file_handler.setLevel(logging.INFO)
 
-    def _load_data(self):
-        """Load preprocessed data or preprocess if needed"""
-        logger.info("="*70)
-        logger.info("LOADING DATA")
-        logger.info("="*70)
+        stream_handler = logging.StreamHandler()
+        stream_handler.setLevel(logging.INFO)
 
-        project_dir = os.path.join(os.path.dirname(__file__), '..')
-        processor = GenomicDataProcessor(self.dataset_name, project_dir)
+        formatter = logging.Formatter("%(asctime)s - %(levelname)s - %(message)s")
+        file_handler.setFormatter(formatter)
+        stream_handler.setFormatter(formatter)
+
+        logger.setLevel(logging.INFO)
+        logger.addHandler(file_handler)
+        logger.addHandler(stream_handler)
+
+        logger.info(f"Logging initialized for: {log_file}")
+
+    def _load_data(self, project_dir):
+        """Load preprocessed matrices or fallback gracefully to run preprocessing"""
+        logger.info("=" * 70)
+        logger.info("LOADING GENOMIC EXPERIMENT DATA")
+        logger.info("=" * 70)
+
+        processor = GenomicDataProcessor(self.dataset_name, str(project_dir))
 
         try:
             self.X, self.y = processor.load_preprocessed_data()
-            logger.info("Loaded from cached preprocessed data")
-        except:
-            logger.info("Preprocessed data not found, running preprocessing pipeline...")
+            logger.info("Loaded successfully from cached preprocessed data files.")
+        except Exception as e:
+            logger.warning(
+                f"Preprocessed cache load failed ({e}). Running full preprocessing pipeline..."
+            )
             self.X, self.y = processor.preprocess_complete()
             processor.save_preprocessed_data()
 
         logger.info(f"Data shape: {self.X.shape}")
         logger.info(f"Class distribution: {np.bincount(self.y)}")
-        logger.info(f"Feature matrix type: {type(self.X)}")
 
-    def evaluate_predictions(self, y_true, y_pred, y_pred_proba=None, fold_num=None):
-        """
-        Compute comprehensive evaluation metrics
-
-        Args:
-            y_true: Ground truth labels
-            y_pred: Predicted labels
-            y_pred_proba: Prediction probabilities (for ROC-AUC)
-            fold_num: Fold number (for logging)
-
-        Returns:
-            dict: Dictionary of metrics
-        """
+    def evaluate_predictions(self, y_true, y_pred, y_pred_proba=None):
+        """Compute comprehensive high-dimensional classification evaluation metrics"""
         metrics = {
-            'accuracy': accuracy_score(y_true, y_pred),
-            'precision': precision_score(y_true, y_pred, zero_division=0),
-            'recall': recall_score(y_true, y_pred, zero_division=0),
-            'f1': f1_score(y_true, y_pred, zero_division=0),
-            'mcc': matthews_corrcoef(y_true, y_pred),
+            "accuracy": accuracy_score(y_true, y_pred),
+            "precision": precision_score(y_true, y_pred, zero_division=0),
+            "recall": recall_score(y_true, y_pred, zero_division=0),
+            "f1": f1_score(y_true, y_pred, zero_division=0),
+            "mcc": matthews_corrcoef(y_true, y_pred),
         }
 
-        # ROC-AUC if probabilities available
         if y_pred_proba is not None:
             try:
-                metrics['roc_auc'] = roc_auc_score(y_true, y_pred_proba[:, 1])
-            except:
-                metrics['roc_auc'] = None
+                metrics["roc_auc"] = roc_auc_score(y_true, y_pred_proba[:, 1])
+            except Exception:
+                metrics["roc_auc"] = None
 
-        # Confusion matrix
         tn, fp, fn, tp = confusion_matrix(y_true, y_pred).ravel()
-        metrics['tn'] = tn
-        metrics['fp'] = fp
-        metrics['fn'] = fn
-        metrics['tp'] = tp
-        metrics['sensitivity'] = tp / (tp + fn) if (tp + fn) > 0 else 0
-        metrics['specificity'] = tn / (tn + fp) if (tn + fp) > 0 else 0
+        metrics.update(
+            {
+                "tn": int(tn),
+                "fp": int(fp),
+                "fn": int(fn),
+                "tp": int(tp),
+                "sensitivity": tp / (tp + fn) if (tp + fn) > 0 else 0,
+                "specificity": tn / (tn + fp) if (tn + fp) > 0 else 0,
+            }
+        )
 
         return metrics
 
     def train_path_a_baseline(self):
-        """
-        Path A: Baseline track
-        Train SVM directly on raw preprocessed data (no feature selection)
-        """
-        logger.info("\n" + "="*70)
-        logger.info("PATH A: BASELINE TRACK (No Feature Selection)")
-        logger.info("="*70)
+        """Path A: Directly evaluate SVM on original features (No Feature Selection)"""
+        logger.info("\n" + "=" * 70)
+        logger.info("PATH A: BASELINE TRACK (All Available Expression Features)")
+        logger.info("=" * 70)
 
-        cv = StratifiedKFold(n_splits=self.n_splits, shuffle=True,
-                            random_state=self.random_state)
-
+        cv = StratifiedKFold(
+            n_splits=self.n_splits, shuffle=True, random_state=self.random_state
+        )
         fold_results = []
-        fold_num = 1
 
-        for train_idx, test_idx in cv.split(self.X, self.y):
-            logger.info(f"\n--- Fold {fold_num}/{self.n_splits} ---")
+        for fold_num, (train_idx, test_idx) in enumerate(cv.split(self.X, self.y), 1):
+            logger.info(f"--- Fold {fold_num}/{self.n_splits} ---")
 
             X_train, X_test = self.X.iloc[train_idx], self.X.iloc[test_idx]
             y_train, y_test = self.y[train_idx], self.y[test_idx]
 
-            # Train SVM on full feature set
-            svm = SVC(kernel='linear', C=1.0, random_state=self.random_state,
-                     class_weight='balanced', probability=True)
+            svm = SVC(
+                kernel="linear",
+                C=1.0,
+                random_state=self.random_state,
+                class_weight="balanced",
+                probability=True,
+            )
             svm.fit(X_train, y_train)
 
-            # Predict
             y_pred = svm.predict(X_test)
             y_pred_proba = svm.predict_proba(X_test)
 
-            # Evaluate
-            metrics = self.evaluate_predictions(y_test, y_pred, y_pred_proba, fold_num)
-            metrics['n_features'] = self.X.shape[1]
-
+            metrics = self.evaluate_predictions(y_test, y_pred, y_pred_proba)
+            metrics["n_features"] = self.X.shape[1]
             fold_results.append(metrics)
 
-            logger.info(f"Accuracy: {metrics['accuracy']:.4f}, "
-                       f"MCC: {metrics['mcc']:.4f}, "
-                       f"F1: {metrics['f1']:.4f}")
+            logger.info(
+                f"Accuracy: {metrics['accuracy']:.4f} | MCC: {metrics['mcc']:.4f} | F1: {metrics['f1']:.4f}"
+            )
 
-            fold_num += 1
+        self.results["path_a"]["fold_results"] = fold_results
+        self._aggregate_cv_results(fold_results, "path_a")
 
-        # Aggregate results
-        self.results['path_a']['fold_results'] = fold_results
-        self._aggregate_cv_results(fold_results, 'path_a')
-
-        logger.info("\n" + "-"*70)
-        logger.info("BASELINE SUMMARY")
-        logger.info("-"*70)
-        self._print_cv_summary('path_a')
+        logger.info("\n" + "-" * 70)
+        logger.info("BASELINE EVALUATION SUMMARY")
+        logger.info("-" * 70)
+        self._print_cv_summary("path_a")
 
     def train_path_b_optimized(self, feature_method="filter_ttest"):
-        """
-        Path B: Optimized track
-        Apply feature selection INSIDE training fold, then train SVM
-
-        Args:
-            feature_method (str): Feature selection method to use
-        """
-        logger.info("\n" + "="*70)
+        """Path B: Feature selection executed strictly inside training folds to eliminate leakage"""
+        logger.info("\n" + "=" * 70)
         logger.info(f"PATH B: OPTIMIZED TRACK (Feature Selection: {feature_method})")
-        logger.info("="*70)
+        logger.info("=" * 70)
 
-        cv = StratifiedKFold(n_splits=self.n_splits, shuffle=True,
-                            random_state=self.random_state)
-
+        cv = StratifiedKFold(
+            n_splits=self.n_splits, shuffle=True, random_state=self.random_state
+        )
         fold_results = []
-        fold_num = 1
 
-        for train_idx, test_idx in cv.split(self.X, self.y):
-            logger.info(f"\n--- Fold {fold_num}/{self.n_splits} ---")
+        for fold_num, (train_idx, test_idx) in enumerate(cv.split(self.X, self.y), 1):
+            logger.info(f"--- Fold {fold_num}/{self.n_splits} ---")
 
             X_train, X_test = self.X.iloc[train_idx], self.X.iloc[test_idx]
             y_train, y_test = self.y[train_idx], self.y[test_idx]
 
-            # CRITICAL: Apply feature selection ONLY to training fold
+            # CRITICAL: Feature selection isolate inside individual training fold split context
             selector = FeatureSelector(method=feature_method, n_features=20)
             X_train_selected = selector.fit_transform(X_train.values, y_train)
-
-            # Transform test fold using same selected features
             X_test_selected = X_test.iloc[:, selector.selected_features].values
 
-            logger.info(f"Selected {len(selector.selected_features)} features")
+            logger.info(f"Isolate subset dimensionality down to: {X_train_selected.shape[1]} features")
 
-            # Train SVM on selected features
-            svm = SVC(kernel='linear', C=1.0, random_state=self.random_state,
-                     class_weight='balanced', probability=True)
+            svm = SVC(
+                kernel="linear",
+                C=1.0,
+                random_state=self.random_state,
+                class_weight="balanced",
+                probability=True,
+            )
             svm.fit(X_train_selected, y_train)
 
-            # Predict
             y_pred = svm.predict(X_test_selected)
             y_pred_proba = svm.predict_proba(X_test_selected)
 
-            # Evaluate
-            metrics = self.evaluate_predictions(y_test, y_pred, y_pred_proba, fold_num)
-            metrics['n_features'] = len(selector.selected_features)
-            metrics['feature_method'] = feature_method
-
+            metrics = self.evaluate_predictions(y_test, y_pred, y_pred_proba)
+            metrics["n_features"] = len(selector.selected_features)
+            metrics["feature_method"] = feature_method
             fold_results.append(metrics)
 
-            logger.info(f"Accuracy: {metrics['accuracy']:.4f}, "
-                       f"MCC: {metrics['mcc']:.4f}, "
-                       f"F1: {metrics['f1']:.4f}")
+            logger.info(
+                f"Accuracy: {metrics['accuracy']:.4f} | MCC: {metrics['mcc']:.4f} | F1: {metrics['f1']:.4f}"
+            )
 
-            fold_num += 1
-
-        # Aggregate results
-        key = f'path_b_{feature_method}'
-        self.results[key] = {'fold_results': fold_results}
+        key = f"path_b_{feature_method}"
+        self.results[key] = {"fold_results": fold_results}
         self._aggregate_cv_results(fold_results, key)
 
-        logger.info("\n" + "-"*70)
-        logger.info(f"OPTIMIZED SUMMARY ({feature_method})")
-        logger.info("-"*70)
+        logger.info("\n" + "-" * 70)
+        logger.info(f"OPTIMIZED EVALUATION SUMMARY ({feature_method})")
+        logger.info("-" * 70)
         self._print_cv_summary(key)
 
     def _aggregate_cv_results(self, fold_results, path_name):
-        """Aggregate cross-validation results across folds"""
+        """Aggregate cross-validation evaluation matrices metrics safely"""
         metrics_df = pd.DataFrame(fold_results)
-
         summary = {}
-        for col in metrics_df.columns:
-            if col not in ['n_features', 'feature_method', 'tn', 'fp', 'fn', 'tp']:
-                summary[f'{col}_mean'] = metrics_df[col].mean()
-                summary[f'{col}_std'] = metrics_df[col].std()
 
-        self.results[path_name]['summary'] = summary
+        for col in metrics_df.columns:
+            if col not in ["n_features", "feature_method", "tn", "fp", "fn", "tp"]:
+                summary[f"{col}_mean"] = float(metrics_df[col].mean())
+                summary[f"{col}_std"] = float(metrics_df[col].std())
+
+        self.results[path_name]["summary"] = summary
 
     def _print_cv_summary(self, path_name):
-        """Print summary of cross-validation results"""
-        summary = self.results[path_name]['summary']
-
+        """Print clear evaluation report summary data profile"""
+        summary = self.results[path_name]["summary"]
         logger.info(f"Accuracy:   {summary['accuracy_mean']:.4f} ± {summary['accuracy_std']:.4f}")
         logger.info(f"Precision:  {summary['precision_mean']:.4f} ± {summary['precision_std']:.4f}")
         logger.info(f"Recall:     {summary['recall_mean']:.4f} ± {summary['recall_std']:.4f}")
         logger.info(f"F1-Score:   {summary['f1_mean']:.4f} ± {summary['f1_std']:.4f}")
         logger.info(f"MCC:        {summary['mcc_mean']:.4f} ± {summary['mcc_std']:.4f}")
-        logger.info(f"ROC-AUC:    {summary.get('roc_auc_mean', 'N/A')}")
+        
+        roc_mean = summary.get("roc_auc_mean")
+        roc_std = summary.get("roc_auc_std")
+        if roc_mean is not None and roc_std is not None:
+            logger.info(f"ROC-AUC:    {roc_mean:.4f} ± {roc_std:.4f}")
+        else:
+            logger.info("ROC-AUC:    N/A")
 
     def compare_paths(self):
-        """Compare performance between Path A and Path B"""
-        logger.info("\n" + "="*70)
-        logger.info("COMPARATIVE ANALYSIS: Path A vs Path B")
-        logger.info("="*70)
+        """Compare performance differences across pipeline configurations"""
+        logger.info("\n" + "=" * 70)
+        logger.info("CROSS-TRACK EVALUATION INTEGRITY REPORT: Path A vs Path B")
+        logger.info("=" * 70)
 
         comparison = {}
-        summary_a = self.results['path_a'].get('summary', {})
+        summary_a = self.results["path_a"].get("summary", {})
 
         for key, value_b in self.results.items():
-            if key.startswith('path_b') and 'summary' in value_b:
-                summary_b = value_b['summary']
+            if key.startswith("path_b") and "summary" in value_b:
+                summary_b = value_b["summary"]
 
-                # Safe division with fallback
-                accuracy_improvement = ((summary_b['accuracy_mean'] - summary_a['accuracy_mean']) /
-                                       summary_a['accuracy_mean'] * 100) if summary_a['accuracy_mean'] != 0 else 0
-                mcc_improvement = ((summary_b['mcc_mean'] - summary_a['mcc_mean']) /
-                                  summary_a['mcc_mean'] * 100) if summary_a['mcc_mean'] != 0 else 0
-                f1_improvement = ((summary_b['f1_mean'] - summary_a['f1_mean']) /
-                                 summary_a['f1_mean'] * 100) if summary_a['f1_mean'] != 0 else 0
+                acc_a, acc_b = summary_a.get("accuracy_mean", 0), summary_b.get("accuracy_mean", 0)
+                mcc_a, mcc_b = summary_a.get("mcc_mean", 0), summary_b.get("mcc_mean", 0)
+                f1_a, f1_b = summary_a.get("f1_mean", 0), summary_b.get("f1_mean", 0)
 
                 improvement = {
-                    'accuracy': accuracy_improvement,
-                    'mcc': mcc_improvement,
-                    'f1': f1_improvement,
+                    "accuracy": ((acc_b - acc_a) / acc_a * 100) if acc_a != 0 else 0,
+                    "mcc": ((mcc_b - mcc_a) / mcc_a * 100) if mcc_a != 0 else 0,
+                    "f1": ((f1_b - f1_a) / f1_a * 100) if f1_a != 0 else 0,
                 }
-
                 comparison[key] = improvement
 
-                logger.info(f"\n{key}:")
-                logger.info(f"  Accuracy improvement: {improvement['accuracy']:+.2f}%")
-                logger.info(f"  MCC improvement:      {improvement['mcc']:+.2f}%")
-                logger.info(f"  F1 improvement:       {improvement['f1']:+.2f}%")
+                logger.info(f"\n{key} Variance Profiling:")
+                logger.info(f"  Accuracy Shift: {improvement['accuracy']:+.2f}%")
+                logger.info(f"  MCC Shift:      {improvement['mcc']:+.2f}%")
+                logger.info(f"  F1 Score Shift: {improvement['f1']:+.2f}%")
 
         return comparison
 
     def save_results(self):
-        """Save results to JSON and CSV"""
-        logger.info("\n" + "="*70)
-        logger.info("SAVING RESULTS")
-        logger.info("="*70)
+        """Save performance metadata configurations cleanly into JSON/CSV files"""
+        logger.info("\n" + "=" * 70)
+        logger.info("EXPLICIT PERFORMANCE EXPORT")
+        logger.info("=" * 70)
 
         timestamp = datetime.now().strftime("%Y%m%d_%H%M%S")
-
-        # Convert results to JSON-serializable format
-        results_json = {}
-        for path, data in self.results.items():
-            results_json[path] = {
-                'summary': data.get('summary', {}),
-                'n_folds': len(data.get('fold_results', []))
+        
+        results_json = {
+            path: {
+                "summary": data.get("summary", {}),
+                "n_folds": len(data.get("fold_results", [])),
             }
+            for path, data in self.results.items() if data
+        }
 
-        # Save JSON
-        json_path = os.path.join(self.results_dir, f'svm_results_{timestamp}.json')
-        with open(json_path, 'w') as f:
+        json_path = self.results_dir / f"svm_results_{timestamp}.json"
+        with open(json_path, "w") as f:
             json.dump(results_json, f, indent=2)
-        logger.info(f"Saved JSON results: {json_path}")
+        logger.info(f"JSON data matrix written to: {json_path}")
 
-        # Save CSV summary
         summaries = []
         for path, data in self.results.items():
-            summary = data.get('summary', {})
-            summary['path'] = path
-            summaries.append(summary)
+            if data and "summary" in data:
+                summary_copy = data["summary"].copy()
+                summary_copy["path"] = path
+                summaries.append(summary_copy)
 
-        csv_path = os.path.join(self.results_dir, f'svm_summary_{timestamp}.csv')
+        csv_path = self.results_dir / f"svm_summary_{timestamp}.csv"
         pd.DataFrame(summaries).to_csv(csv_path, index=False)
-        logger.info(f"Saved CSV summary: {csv_path}")
+        logger.info(f"CSV operational summary spreadsheet written to: {csv_path}")
 
     def run_full_pipeline(self):
-        """Run complete training pipeline"""
+        """Run complete parallel training tracks sequence"""
         dataset_info = DATASET_INFO.get(self.dataset_name, {})
 
-        logger.info("\n" + "="*70)
-        logger.info("STARTING SVM CLASSIFIER PIPELINE")
-        logger.info("="*70)
-        logger.info(f"Dataset: {dataset_info.get('name', self.dataset_name)}")
-        logger.info(f"Description: {dataset_info.get('description', '')}")
-        logger.info(f"Results Directory: {self.results_dir}")
-        logger.info(f"Folds: {self.n_splits}-Fold Cross-Validation")
-        logger.info("="*70)
+        logger.info("\n" + "=" * 70)
+        logger.info("EXECUTION MATRIX STARTED")
+        logger.info("=" * 70)
+        logger.info(f"Target Cluster:   {dataset_info.get('name', self.dataset_name)}")
+        logger.info(f"Configuration:    {dataset_info.get('description', '')}")
+        logger.info(f"Target Output:    {self.results_dir}")
+        logger.info("=" * 70)
 
-        # Path A: Baseline
         self.train_path_a_baseline()
 
-        # Path B: Optimized (test each feature method)
         feature_methods = ["filter_ttest", "filter_anova", "wrapper_svm", "embedded_lasso"]
         for method in feature_methods:
             try:
                 self.train_path_b_optimized(feature_method=method)
             except Exception as e:
-                logger.error(f"Error in Path B ({method}): {e}")
+                logger.error(f"Execution tracking failed along Track Path B ({method}): {e}")
 
-        # Comparison
         self.compare_paths()
-
-        # Save results
         self.save_results()
-
-        logger.info("\n" + "="*70)
-        logger.info("PIPELINE COMPLETE")
-        logger.info(f"Results saved to: {self.results_dir}")
-        logger.info("="*70)
 
 
 def main():
-    """Main execution"""
+    """Main wrapper validation loop invocation"""
     classifier = SVMClassifierWithCV(dataset_name="GSE42568", n_splits=5)
     classifier.run_full_pipeline()
 
