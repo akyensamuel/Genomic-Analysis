@@ -198,7 +198,7 @@ class FeatureSelectionPipeline:
         "wrapper_svm": "SVM-RFE",
         "wrapper_rf": "RF-RFE",
         "embedded_lasso": "LASSO"
-    }
+
 
     def __init__(self, n_features=20):
         self.n_features = n_features
