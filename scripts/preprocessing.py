@@ -1,147 +1,194 @@
 """
 Unified Preprocessing Pipeline
-Replicates Jupyter notebook logic in modular, reusable format
-Handles data ingestion, transformation, and artifact storage
+================================
+Replicates Jupyter notebook logic in modular, reusable format.
+Handles data ingestion, transformation, and artifact storage.
+
+Standalone usage
+----------------
+    python preprocessing.py [dataset_name]
+
+    dataset_name  One of the keys in dataset_config (default: GSE19804).
+                  Runs the full pipeline, profiles the result, and saves
+                  the preprocessed cache to disk.
+
+Fix log (vs original)
+---------------------
+- Removed module-level basicConfig call; caller is responsible for
+  configuring logging. basicConfig is called only inside __main__ so
+  importing this module never reconfigures the root logger.
+- Added export_csv() to produce a labelled CSV that feature_selection.py
+  (standalone mode) and any other script can consume directly, closing
+  the data-exchange gap between the .npy cache and the CSV-based loader.
+- project_dir now defaults to the directory containing this file rather
+  than Path.cwd(), so the correct project root is used regardless of
+  the working directory at import / instantiation time.
 """
 
+from __future__ import annotations
+
 import logging
-from pathlib import Path
+import sys
 import urllib.request
+from pathlib import Path
+
 import numpy as np
 import pandas as pd
 from sklearn.preprocessing import StandardScaler
 
-# Setup clean logger
-logging.basicConfig(
-    level=logging.INFO, format="%(asctime)s - %(levelname)s - %(message)s"
-)
 logger = logging.getLogger(__name__)
 
 
 class GenomicDataProcessor:
-    """Centralized preprocessing pipeline for high-dimensional gene expression data"""
+    """Centralised preprocessing pipeline for high-dimensional gene expression data."""
 
-    def __init__(self, dataset_name="GSE19804", project_dir=""):
+    # ------------------------------------------------------------------
+    # Dataset registry — single source of truth for the whole project
+    # ------------------------------------------------------------------
+    DATASET_CONFIG: dict = {
+        "GSE42568": {
+            "url": (
+                "https://ftp.ncbi.nlm.nih.gov/geo/series/GSE42nnn/"
+                "GSE42568/matrix/GSE42568_series_matrix.txt.gz"
+            ),
+            "filename": "GSE42568_series_matrix.txt.gz",
+            "cancer_type": "Breast Cancer",
+            "n_cancer": 104,
+            "n_normal": 17,
+        },
+        "GSE19804": {
+            "url": (
+                "https://ftp.ncbi.nlm.nih.gov/geo/series/GSE19nnn/"
+                "GSE19804/matrix/GSE19804_series_matrix.txt.gz"
+            ),
+            "filename": "GSE19804_series_matrix.txt.gz",
+            "cancer_type": "Lung Cancer",
+            "n_cancer": 60,
+            "n_normal": 60,
+        },
+    }
+
+    def __init__(self, dataset_name: str = "GSE19804", project_dir: str = ""):
         """
-        Initialize processor with dynamic metadata configurations.
+        Parameters
+        ----------
+        dataset_name : str
+            Key into DATASET_CONFIG.
+        project_dir : str
+            Absolute path to the project root.  Defaults to the directory
+            containing this file (not cwd) so the correct paths are used
+            regardless of where Python is invoked from.
         """
+        if dataset_name not in self.DATASET_CONFIG:
+            raise KeyError(
+                f"Dataset '{dataset_name}' is not registered in DATASET_CONFIG. "
+                f"Available: {list(self.DATASET_CONFIG)}"
+            )
+
         self.dataset_name = dataset_name
-        
-        # Modern path handling using Pathlib
-        self.project_dir = Path(project_dir) if project_dir else Path.cwd()
+
+        # Default to the file's own directory rather than cwd so paths are
+        # stable regardless of where the script is run from.
+        self.project_dir = (
+            Path(project_dir) if project_dir else Path(__file__).resolve().parent.parent
+        )
         self.datasets_dir = self.project_dir / "datasets"
         self.preprocessed_dir = self.project_dir / "preprocessed_datasets"
 
         self.datasets_dir.mkdir(parents=True, exist_ok=True)
         self.preprocessed_dir.mkdir(parents=True, exist_ok=True)
 
-        # CENTRALIZED CONFIGURATION: The single source of truth for the entire project
-        self.dataset_config = {
-            "GSE42568": {
-                "url": "https://ftp.ncbi.nlm.nih.gov/geo/series/GSE42nnn/GSE42568/matrix/GSE42568_series_matrix.txt.gz",
-                "filename": "GSE42568_series_matrix.txt.gz",
-                "cancer_type": "Breast Cancer",
-                "n_cancer": 104,
-                "n_normal": 17,
-            },
-            "GSE19804": {
-                "url": "https://ftp.ncbi.nlm.nih.gov/geo/series/GSE19nnn/GSE19804/matrix/GSE19804_series_matrix.txt.gz",
-                "filename": "GSE19804_series_matrix.txt.gz",
-                "cancer_type": "Lung Cancer",
-                "n_cancer": 60,
-                "n_normal": 60,
-            },
-        }
+        # Expose a per-instance view of the config for callers that iterate it
+        self.dataset_config = self.DATASET_CONFIG
 
-        # Validate existence of requested target dataset configuration
-        if self.dataset_name not in self.dataset_config:
-            raise KeyError(
-                f"Dataset '{self.dataset_name}' is not registered in dataset_config."
-            )
+        # Pipeline state
+        self.X_raw: pd.DataFrame | None = None
+        self.X_log: pd.DataFrame | None = None
+        self.X_scaled: pd.DataFrame | None = None
+        self.y: np.ndarray | None = None
 
-        # Pipeline state placeholders
-        self.X_raw = None
-        self.X_log = None
-        self.X_scaled = None
-        self.y = None
-
-    def download_dataset(self):
-        """Automatically download dataset directly from GEO if not present locally"""
-        config = self.dataset_config[self.dataset_name]
+    # ------------------------------------------------------------------
+    # Download
+    # ------------------------------------------------------------------
+    def download_dataset(self) -> Path:
+        """Download the GEO series matrix if not already cached locally."""
+        config = self.DATASET_CONFIG[self.dataset_name]
         filepath = self.datasets_dir / config["filename"]
 
         if filepath.exists():
-            logger.info(f"Dataset target cache hit: {filepath}")
+            logger.info(f"Dataset already cached: {filepath}")
             return filepath
 
-        logger.info(f"Downloading remote series matrix {self.dataset_name} from GEO FTP...")
+        logger.info(f"Downloading {self.dataset_name} from GEO FTP …")
         try:
-            # Added a short timeout safeguard so download requests don't hang indefinitely
             urllib.request.urlretrieve(config["url"], filepath)
-            logger.info(f"Downloaded successfully to: {filepath}")
-            return filepath
-        except Exception as e:
-            logger.error(f"Network download transmission step failed: {e}")
+            logger.info(f"Download complete: {filepath}")
+        except Exception as exc:
+            logger.error(f"Download failed: {exc}")
             raise
 
-    def load_data(self):
-        """Load GEO series matrix, strip comments, and structure matrices"""
-        logger.info(f"Loading experiment environment: {self.dataset_name}")
+        return filepath
 
+    # ------------------------------------------------------------------
+    # Load & transform
+    # ------------------------------------------------------------------
+    def load_data(self) -> tuple[pd.DataFrame, np.ndarray]:
+        """Load the GEO series matrix, transpose, and create the label vector."""
+        logger.info(f"Loading {self.dataset_name} …")
         filepath = self.download_dataset()
-        config = self.dataset_config[self.dataset_name]
+        config = self.DATASET_CONFIG[self.dataset_name]
 
-        # Load matrix, skipping metadata lines starting with '!'
+        # Skip metadata comment lines starting with '!'
         df = pd.read_csv(
             filepath, compression="infer", sep="\t", comment="!", index_col=0
         )
 
-        # Transpose: features must map to columns, instances to rows
+        # Transpose so rows = samples, columns = genes
         self.X_raw = df.T
 
-        # Create target labels: 1 = Cancer, 0 = Normal
-        # Note: This assumes the data source maps all cancer rows before normal rows natively
-        self.y = np.array([1] * config["n_cancer"] + [0] * config["n_normal"])
-
-        logger.info(f"Data parsed: {self.X_raw.shape[0]} samples across {self.X_raw.shape[1]} features.")
-        logger.info(f"Target vector mapped: {config['n_cancer']} Cancer | {config['n_normal']} Normal")
-
-        return self.X_raw, self.y
-
-    def apply_log_transformation(self):
-        """Apply Log2 transformation to stabilize variance variance tracking"""
-        if self.X_raw is None:
-            raise ValueError("State trace uninitialized. Execute load_data() first.")
-
-        logger.info("Applying monotonic Log2(x + 1) transformation step...")
-        self.X_log = np.log2(self.X_raw + 1)
-        
-        # Optimization: Free raw data memory allocations if no longer required
-        self.X_raw = None 
-        return self.X_log
-
-    def apply_standardization(self):
-        """Apply Z-score standardization across expression profiles"""
-        if self.X_log is None:
-            raise ValueError("State trace uninitialized. Execute apply_log_transformation() first.")
-
-        logger.info("Applying standardized Z-score scaling standard scale modifications...")
-        scaler = StandardScaler()
-        X_scaled_array = scaler.fit_transform(self.X_log)
-        
-        # Build DataFrame while preserving full structural components (index and columns)
-        self.X_scaled = pd.DataFrame(
-            X_scaled_array, index=self.X_log.index, columns=self.X_log.columns
+        # Labels: 1 = Cancer, 0 = Normal
+        # Assumes GEO ordering: all cancer samples come before normal samples.
+        self.y = np.array(
+            [1] * config["n_cancer"] + [0] * config["n_normal"], dtype=int
         )
 
-        # Optimization: Clear log matrix out of memory allocation footprints
-        self.X_log = None 
+        logger.info(
+            f"Loaded: {self.X_raw.shape[0]} samples × {self.X_raw.shape[1]} features | "
+            f"{config['n_cancer']} cancer / {config['n_normal']} normal"
+        )
+        return self.X_raw, self.y
+
+    def apply_log_transformation(self) -> pd.DataFrame:
+        """Apply log2(x + 1) transformation to stabilise variance."""
+        if self.X_raw is None:
+            raise ValueError("Run load_data() first.")
+
+        logger.info("Applying log2(x + 1) transformation …")
+        self.X_log = np.log2(self.X_raw + 1)
+        self.X_raw = None  # free memory
+        return self.X_log
+
+    def apply_standardization(self) -> pd.DataFrame:
+        """Z-score standardise across all features."""
+        if self.X_log is None:
+            raise ValueError("Run apply_log_transformation() first.")
+
+        logger.info("Applying Z-score standardisation …")
+        scaler = StandardScaler()
+        X_scaled_arr = scaler.fit_transform(self.X_log)
+
+        self.X_scaled = pd.DataFrame(
+            X_scaled_arr,
+            index=self.X_log.index,
+            columns=self.X_log.columns,
+        )
+        self.X_log = None  # free memory
         return self.X_scaled
 
-    def preprocess_complete(self):
-        """Execute linear cascade pipeline execution block"""
+    def preprocess_complete(self) -> tuple[pd.DataFrame, np.ndarray]:
+        """Run the full pipeline: load → log-transform → standardise."""
         logger.info("=" * 60)
-        logger.info(f"INITIALIZING PIPELINE: {self.dataset_name}")
+        logger.info(f"PREPROCESSING PIPELINE: {self.dataset_name}")
         logger.info("=" * 60)
 
         self.load_data()
@@ -149,23 +196,28 @@ class GenomicDataProcessor:
         self.apply_standardization()
 
         logger.info("=" * 60)
-        logger.info("PIPELINE SEQUENCE EVALUATED SUCCESSFULLY")
+        logger.info("PIPELINE COMPLETE")
         logger.info("=" * 60)
 
         return self.X_scaled, self.y
 
-    def profile_data(self, stage="scaled"):
-        """Generate mathematical data profiling snapshot from data frames"""
-        logger.info(f"\n--- EXPERIMENTAL DATA PROFILE SUMMARY ({stage.upper()}) ---")
-
-        if stage == "scaled":
-            X = self.X_scaled
-        elif stage == "raw" and self.X_raw is not None:
-            X = self.X_raw
-        elif stage == "log" and self.X_log is not None:
-            X = self.X_log
-        else:
-            raise ValueError(f"Stage data matrix trace for '{stage}' is unavailable or was cleared from memory.")
+    # ------------------------------------------------------------------
+    # Profiling
+    # ------------------------------------------------------------------
+    def profile_data(self, stage: str = "scaled") -> dict:
+        """Log and return summary statistics for a pipeline stage."""
+        stage_map = {
+            "scaled": self.X_scaled,
+            "raw": self.X_raw,
+            "log": self.X_log,
+        }
+        X = stage_map.get(stage)
+        if X is None:
+            raise ValueError(
+                f"Stage '{stage}' is unavailable (either not yet computed or "
+                f"already freed from memory). Available stages: "
+                f"{[k for k, v in stage_map.items() if v is not None]}"
+            )
 
         vals = X.values
         profile = {
@@ -177,63 +229,119 @@ class GenomicDataProcessor:
             "median": float(np.median(vals)),
         }
 
-        logger.info(f"Dimensional Matrix Array Bounds: {profile['shape']}")
-        logger.info(f"Global Expression Distribution Mean: {profile['mean']:.4f}")
-        logger.info(f"Standard Error Deviation Matrix Delta: {profile['std']:.4f}")
-        logger.info(f"Expression Profile Absolute Boundary Bounds: [{profile['min']:.4f}, {profile['max']:.4f}]")
-        logger.info(f"Expression Profile Array Median Score: {profile['median']:.4f}\n")
+        logger.info(f"--- DATA PROFILE ({stage.upper()}) ---")
+        logger.info(f"  Shape  : {profile['shape']}")
+        logger.info(f"  Mean   : {profile['mean']:.4f}")
+        logger.info(f"  Std    : {profile['std']:.4f}")
+        logger.info(f"  Range  : [{profile['min']:.4f}, {profile['max']:.4f}]")
+        logger.info(f"  Median : {profile['median']:.4f}")
 
         return profile
 
-    def save_preprocessed_data(self):
-        """Save preprocessed data matrices safely alongside structural index tags"""
+    # ------------------------------------------------------------------
+    # Persistence — .npy cache (used by svm_classifier)
+    # ------------------------------------------------------------------
+    def save_preprocessed_data(self) -> None:
+        """
+        Serialise the scaled matrix to four .npy files under
+        preprocessed_datasets/<dataset_name>/.
+
+        Files written
+        -------------
+        <name>_X_scaled.npy   – float array (n_samples, n_features)
+        <name>_y.npy          – int array   (n_samples,)
+        <name>_genes.npy      – object array of gene/feature names
+        <name>_samples.npy    – object array of sample IDs
+        """
         if self.X_scaled is None:
-            raise ValueError("No scaled matrices stored. Can not serialize state outputs.")
+            raise ValueError("No scaled data to save. Run preprocess_complete() first.")
 
-        logger.info("Serializing analytical state targets to disk caches...")
+        logger.info(f"Saving preprocessed cache for {self.dataset_name} …")
 
-        X_path = self.preprocessed_dir / f"{self.dataset_name}_X_scaled.npy"
-        y_path = self.preprocessed_dir / f"{self.dataset_name}_y.npy"
-        cols_path = self.preprocessed_dir / f"{self.dataset_name}_genes.npy"
-        index_path = self.preprocessed_dir / f"{self.dataset_name}_samples.npy" # FIXED: Cache sample IDs!
+        out_dir = self.preprocessed_dir / self.dataset_name
+        out_dir.mkdir(parents=True, exist_ok=True)
 
-        np.save(X_path, self.X_scaled.values)
-        np.save(y_path, self.y)
-        np.save(cols_path, self.X_scaled.columns.values)
-        np.save(index_path, self.X_scaled.index.values)
+        np.save(out_dir / f"{self.dataset_name}_X_scaled.npy", self.X_scaled.values)
+        np.save(out_dir / f"{self.dataset_name}_y.npy", self.y)
+        np.save(out_dir / f"{self.dataset_name}_genes.npy", self.X_scaled.columns.values)
+        np.save(out_dir / f"{self.dataset_name}_samples.npy", self.X_scaled.index.values)
 
-        logger.info(f"Cache complete: Stored matrices and index arrays in {self.preprocessed_dir}")
+        logger.info(f"Cache saved to: {out_dir}")
 
-    def load_preprocessed_data(self):
-        """Load stored performance binaries to recover structured expression DataFrames"""
-        logger.info("Checking disk signatures for preprocessed array binaries...")
+    def load_preprocessed_data(self) -> tuple[pd.DataFrame, np.ndarray]:
+        """
+        Load the .npy cache written by save_preprocessed_data().
 
-        X_path = self.preprocessed_dir / f"{self.dataset_name}_X_scaled.npy"
-        y_path = self.preprocessed_dir / f"{self.dataset_name}_y.npy"
-        cols_path = self.preprocessed_dir / f"{self.dataset_name}_genes.npy"
-        index_path = self.preprocessed_dir / f"{self.dataset_name}_samples.npy"
+        Raises FileNotFoundError if any of the four expected files are missing.
+        """
+        logger.info(f"Loading preprocessed cache for {self.dataset_name} …")
 
-        # Explicitly checking paths via Pathlib metrics
-        if not (X_path.exists() and y_path.exists() and cols_path.exists() and index_path.exists()):
-            raise FileNotFoundError("Cached file signatures missing on storage volumes.")
+        cache_dir = self.preprocessed_dir / self.dataset_name
+        X_path     = cache_dir / f"{self.dataset_name}_X_scaled.npy"
+        y_path     = cache_dir / f"{self.dataset_name}_y.npy"
+        cols_path  = cache_dir / f"{self.dataset_name}_genes.npy"
+        index_path = cache_dir / f"{self.dataset_name}_samples.npy"
 
-        X_scaled_array = np.load(X_path)
+        missing = [p for p in (X_path, y_path, cols_path, index_path) if not p.exists()]
+        if missing:
+            raise FileNotFoundError(
+                f"Cache incomplete — missing file(s): {[str(m) for m in missing]}"
+            )
+
         self.y = np.load(y_path)
-        gene_names = np.load(cols_path, allow_pickle=True)
-        sample_ids = np.load(index_path, allow_pickle=True)
-
-        # Reconstruct DataFrame with structural indexes intact
         self.X_scaled = pd.DataFrame(
-            X_scaled_array, index=sample_ids, columns=gene_names
+            np.load(X_path),
+            index=np.load(index_path, allow_pickle=True),
+            columns=np.load(cols_path, allow_pickle=True),
         )
 
-        logger.info(f"Data state restored successfully: {self.X_scaled.shape}")
+        logger.info(f"Cache loaded: {self.X_scaled.shape}")
         return self.X_scaled, self.y
 
+    # ------------------------------------------------------------------
+    # Persistence — CSV export (used by feature_selection standalone mode)
+    # ------------------------------------------------------------------
+    def export_csv(self, out_path: Path | None = None) -> Path:
+        """
+        Write the scaled matrix plus a 'label' column to a CSV file so that
+        feature_selection.py (standalone mode) can load it directly.
 
+        The file is written to
+            preprocessed_datasets/<dataset_name>/<dataset_name>.csv
+        unless out_path is given explicitly.
+
+        Returns the path of the written file.
+        """
+        if self.X_scaled is None:
+            raise ValueError("No scaled data to export. Run preprocess_complete() first.")
+
+        if out_path is None:
+            out_dir = self.preprocessed_dir / self.dataset_name
+            out_dir.mkdir(parents=True, exist_ok=True)
+            out_path = out_dir / f"{self.dataset_name}.csv"
+
+        df_out = self.X_scaled.copy()
+        df_out.insert(0, "label", self.y)
+        df_out.to_csv(out_path)
+
+        logger.info(f"CSV exported to: {out_path}  ({df_out.shape})")
+        return out_path
+
+
+# ---------------------------------------------------------------------------
+# Standalone entry point
+# ---------------------------------------------------------------------------
 if __name__ == "__main__":
-    # Test operational trace validation block
-    processor = GenomicDataProcessor(dataset_name="GSE19804")
+    logging.basicConfig(
+        level=logging.INFO,
+        format="%(asctime)s  %(levelname)-8s  %(message)s",
+        datefmt="%H:%M:%S",
+    )
+
+    dataset_name = sys.argv[1] if len(sys.argv) > 1 else "GSE19804"
+
+    processor = GenomicDataProcessor(dataset_name=dataset_name)
     X, y = processor.preprocess_complete()
     processor.profile_data("scaled")
     processor.save_preprocessed_data()
+    processor.export_csv()
