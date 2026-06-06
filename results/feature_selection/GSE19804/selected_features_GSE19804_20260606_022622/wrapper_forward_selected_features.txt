@@ -1,0 +1,30 @@
+Feature Selection Method : Forward Selection (Wrapper)
+Method Key               : wrapper_forward
+Dataset                  : GSE19804
+Timestamp                : 20260606_022622
+Original Feature Space   : 54675
+Features Selected        : 20
+Dimensionality Reduction : 99.96%
+============================================================
+Index      Feature Name
+------------------------------------------------------------
+0          1007_s_at
+1          1053_at
+2          117_at
+3          121_at
+4          1255_g_at
+5          1294_at
+6          1316_at
+7          1320_at
+8          1405_i_at
+9          1431_at
+10         1438_at
+11         1487_at
+12         1494_f_at
+13         1552256_a_at
+14         1552257_a_at
+15         1552258_at
+16         1552261_at
+17         1552263_at
+12882      203435_s_at
+14554      205107_s_at

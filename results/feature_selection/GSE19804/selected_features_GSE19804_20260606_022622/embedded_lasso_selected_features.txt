@@ -1,0 +1,30 @@
+Feature Selection Method : LASSO / L1 Logistic (Embedded)
+Method Key               : embedded_lasso
+Dataset                  : GSE19804
+Timestamp                : 20260606_022622
+Original Feature Space   : 54675
+Features Selected        : 20
+Dimensionality Reduction : 99.96%
+============================================================
+Index      Feature Name
+------------------------------------------------------------
+3845       1557729_at
+11011      201563_at
+11971      202523_s_at
+11972      202524_s_at
+12882      203435_s_at
+13767      204320_at
+14554      205107_s_at
+15388      205941_s_at
+16746      207302_at
+19993      210608_s_at
+22044      212739_s_at
+25211      215918_s_at
+26713      217428_s_at
+27056      217771_at
+28792      219508_at
+31695      222416_at
+37794      228540_at
+39723      230469_at
+51849      242600_at
+54390      43511_s_at

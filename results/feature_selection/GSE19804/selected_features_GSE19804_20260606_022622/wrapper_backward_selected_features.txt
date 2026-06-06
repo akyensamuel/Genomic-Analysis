@@ -1,0 +1,30 @@
+Feature Selection Method : Backward Elimination (Wrapper)
+Method Key               : wrapper_backward
+Dataset                  : GSE19804
+Timestamp                : 20260606_022622
+Original Feature Space   : 54675
+Features Selected        : 20
+Dimensionality Reduction : 99.96%
+============================================================
+Index      Feature Name
+------------------------------------------------------------
+26336      217046_s_at
+51581      242332_at
+51589      242340_at
+51790      242541_at
+52421      243172_at
+52730      243481_at
+53054      243805_at
+53062      243813_at
+53166      243917_at
+53672      244422_at
+53705      244455_at
+54263      37028_at
+54274      37384_at
+54294      37892_at
+54338      39817_s_at
+54417      45749_at
+54492      53991_at
+54545      61297_at
+54553      63305_at
+54556      64064_at

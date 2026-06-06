@@ -1,0 +1,30 @@
+Feature Selection Method : Welch's T-Test (Filter)
+Method Key               : filter_ttest
+Dataset                  : GSE19804
+Timestamp                : 20260606_022622
+Original Feature Space   : 54675
+Features Selected        : 20
+Dimensionality Reduction : 99.96%
+============================================================
+Index      Feature Name
+------------------------------------------------------------
+3845       1557729_at
+11972      202524_s_at
+12882      203435_s_at
+14554      205107_s_at
+15084      205637_s_at
+15388      205941_s_at
+15654      206208_at
+15655      206209_s_at
+16746      207302_at
+23015      213715_s_at
+25211      215918_s_at
+26336      217046_s_at
+26464      217177_s_at
+27056      217771_at
+37794      228540_at
+39147      229893_at
+39386      230132_at
+39723      230469_at
+41245      231991_at
+48899      239650_at

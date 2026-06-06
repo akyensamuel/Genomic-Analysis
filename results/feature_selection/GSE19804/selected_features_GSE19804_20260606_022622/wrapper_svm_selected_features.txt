@@ -1,0 +1,30 @@
+Feature Selection Method : SVM-RFE (Wrapper)
+Method Key               : wrapper_svm
+Dataset                  : GSE19804
+Timestamp                : 20260606_022622
+Original Feature Space   : 54675
+Features Selected        : 20
+Dimensionality Reduction : 99.96%
+============================================================
+Index      Feature Name
+------------------------------------------------------------
+11972      202524_s_at
+15388      205941_s_at
+19993      210608_s_at
+25211      215918_s_at
+26336      217046_s_at
+26713      217428_s_at
+27056      217771_at
+28449      219165_at
+28497      219213_at
+28792      219508_at
+28810      219526_at
+28939      219655_at
+33503      224233_s_at
+33619      224352_s_at
+33690      224428_s_at
+33709      224448_s_at
+37794      228540_at
+39723      230469_at
+48594      239345_at
+54545      61297_at
