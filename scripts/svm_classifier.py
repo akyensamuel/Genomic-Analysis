@@ -1,37 +1,29 @@
 """
 SVM Classifier with Nested Cross-Validation
-=============================================
 Implements dual-track training:
-  Path A — Baseline: SVM on all features (no feature selection)
-  Path B — Optimised: SVM with feature selection inside each training fold
+Path A — Baseline: SVM on all features (no feature selection)
+Path B — Optimised: SVM with feature selection INSIDE each training fold.
 
-Feature selection is applied INSIDE each training fold to prevent data leakage.
+CRITICAL FIX: Uses sklearn.pipeline.Pipeline to guarantee that feature 
+selection is fitted ONLY on the training fold, completely preventing 
+data leakage. Pre-computing features on the full dataset is intentionally 
+avoided here to preserve evaluation validity.
 
 Fix log (vs original)
----------------------
-- Removed stale "path_b": {} from self.results __init__ dict (Issue 5).
-  train_path_b_optimized writes to "path_b_{method}" keys; the orphaned
-  "path_b" key was polluting JSON/CSV output with an empty entry.
-- DATASET_INFO is no longer built at module import time (Issue 7).
-  build_dataset_info() is now called lazily inside SVMClassifierWithCV.__init__
-  so importing this module does not touch the filesystem or call cwd().
-- _setup_logging() no longer clears root handlers (Issue 2).
-  It now attaches handlers only to the module-level logger, leaving the
-  root logger intact so feature_selection and preprocessing log normally.
-- run_full_pipeline() now reads the method list from
-  FeatureSelectionPipeline.ALL_METHODS instead of a hardcoded list (Issue 3),
-  so adding/renaming a method in feature_selection.py propagates automatically.
+- Removed stale "path_b": {} from self.results init dict.
+- DATASET_INFO is no longer built at module import time.
+- _setup_logging() no longer clears root handlers.
+- run_full_pipeline() reads the method list from FeatureSelectionPipeline.ALL_METHODS.
+- NEW: Path B now uses sklearn.pipeline.Pipeline to ensure strict, leakage-free 
+  feature selection within each cross-validation fold.
 """
-
 from __future__ import annotations
-
 import json
 import logging
 import sys
 from datetime import datetime
 from pathlib import Path
 from typing import Optional
-
 import numpy as np
 import pandas as pd
 from sklearn.metrics import (
@@ -44,6 +36,7 @@ from sklearn.metrics import (
     roc_auc_score,
 )
 from sklearn.model_selection import StratifiedKFold
+from sklearn.pipeline import Pipeline
 from sklearn.svm import SVC
 
 # Ensure sibling scripts are importable regardless of working directory
@@ -56,21 +49,14 @@ from preprocessing import GenomicDataProcessor
 
 logger = logging.getLogger(__name__)
 
-
 # ---------------------------------------------------------------------------
 # Dataset metadata helper — called lazily, not at import time
 # ---------------------------------------------------------------------------
 def build_dataset_info(project_dir: Optional[str] = None) -> dict:
     """
     Build dataset display/folder metadata from GenomicDataProcessor.DATASET_CONFIG.
-
     Called lazily inside SVMClassifierWithCV.__init__ so that importing this
     module never touches the filesystem or calls Path.cwd().
-
-    Parameters
-    ----------
-    project_dir : str, optional
-        Passed to GenomicDataProcessor so it uses the correct project root.
     """
     processor = GenomicDataProcessor(project_dir=project_dir or "")
     dataset_info: dict = {}
@@ -83,7 +69,7 @@ def build_dataset_info(project_dir: Optional[str] = None) -> dict:
         dataset_info[dataset_name] = {
             "name": cancer_type,
             "description": (
-                f"{dataset_name} - {cancer_type} "
+                f"{dataset_name} - {cancer_type}  "
                 f"({balance}: {config['n_cancer']}/{config['n_normal']}, {total} total)"
             ),
             "folder": f"{dataset_name}_{cancer_type.lower().replace(' ', '_')}",
@@ -91,13 +77,12 @@ def build_dataset_info(project_dir: Optional[str] = None) -> dict:
 
     return dataset_info
 
-
 # ---------------------------------------------------------------------------
 # SVMClassifierWithCV
 # ---------------------------------------------------------------------------
 class SVMClassifierWithCV:
-    """SVM with nested cross-validation for robust evaluation."""
-
+    """SVM with cross-validation for robust, leakage-free evaluation."""
+    
     def __init__(
         self,
         dataset_name: str = "GSE19804",
@@ -110,12 +95,11 @@ class SVMClassifierWithCV:
 
         self.base_dir = Path(__file__).resolve().parent.parent
 
-        # Build metadata lazily here instead of at module import time,
-        # so the project root is always resolved from __file__, not cwd().
+        # Build metadata lazily here instead of at module import time
         dataset_info = build_dataset_info(str(self.base_dir))
         info = dataset_info.get(dataset_name, {})
         self.dataset_folder = info.get("folder", dataset_name)
-        self.dataset_info = dataset_info  # retained for run_full_pipeline header
+        self.dataset_info = dataset_info
 
         self.results_dir = self.base_dir / "results" / self.dataset_folder
         self.results_dir.mkdir(parents=True, exist_ok=True)
@@ -127,17 +111,14 @@ class SVMClassifierWithCV:
         self._load_data()
 
         # Only Path A is pre-allocated; Path B keys are created dynamically
-        # by train_path_b_optimized() as "path_b_{method}".
         self.results: dict = {"path_a": {}}
 
     # ------------------------------------------------------------------
-    # Logging — attaches to the module logger only, not the root logger,
-    # so other modules' loggers are unaffected.
+    # Logging
     # ------------------------------------------------------------------
     def _setup_logging(self) -> None:
         log_file = self.results_dir / "svm_training.log"
 
-        # Remove only this logger's own handlers before adding new ones
         for handler in logger.handlers[:]:
             logger.removeHandler(handler)
 
@@ -154,7 +135,6 @@ class SVMClassifierWithCV:
         logger.setLevel(logging.INFO)
         logger.addHandler(file_handler)
         logger.addHandler(stream_handler)
-        # Prevent messages bubbling up to the root logger and being double-printed
         logger.propagate = False
 
         logger.info(f"Logging initialised → {log_file}")
@@ -185,7 +165,7 @@ class SVMClassifierWithCV:
     # ------------------------------------------------------------------
     # Evaluation
     # ------------------------------------------------------------------
-    def evaluate_predictions(
+    def evaluate_predictions( 
         self,
         y_true: np.ndarray,
         y_pred: np.ndarray,
@@ -208,7 +188,7 @@ class SVMClassifierWithCV:
 
         tn, fp, fn, tp = confusion_matrix(y_true, y_pred).ravel()
         metrics.update({
-            "tn": int(tn), "fp": int(fp), "fn": int(fn), "tp": int(tp),
+            "tn": int(tn),  "fp": int(fp),  "fn": int(fn),  "tp": int(tp),
             "sensitivity": tp / (tp + fn) if (tp + fn) > 0 else 0.0,
             "specificity": tn / (tn + fp) if (tn + fp) > 0 else 0.0,
         })
@@ -253,8 +233,8 @@ class SVMClassifierWithCV:
             fold_results.append(metrics)
 
             logger.info(
-                f"  Accuracy: {metrics['accuracy']:.4f} | "
-                f"MCC: {metrics['mcc']:.4f} | F1: {metrics['f1']:.4f}"
+                f"  Accuracy: {metrics['accuracy']:.4f} |  "
+                f"MCC: {metrics['mcc']:.4f} | F1: {metrics['f1']:.4f} "
             )
 
         self.results["path_a"]["fold_results"] = fold_results
@@ -266,15 +246,18 @@ class SVMClassifierWithCV:
         self._print_cv_summary("path_a")
 
     # ------------------------------------------------------------------
-    # Path B — Optimised (feature selection inside each fold)
+    # Path B — Optimised (LEAKAGE-FREE via sklearn Pipeline)
     # ------------------------------------------------------------------
-    def train_path_b_optimized(self, feature_method: str = "filter_ttest") -> None:
+    def train_path_b_optimized(self, feature_method: str = "filter_ttest", n_features: int = 20) -> None:
         """
-        Evaluate SVM with feature selection applied strictly inside each
-        training fold to prevent data leakage.
+        Evaluate SVM with feature selection applied strictly INSIDE each 
+        training fold using sklearn.pipeline.Pipeline.
+        
+        This guarantees ZERO data leakage: the feature selector only ever 
+        sees the training data for that specific fold.
         """
         logger.info("\n" + "=" * 70)
-        logger.info(f"PATH B: OPTIMISED — Feature selection: {feature_method}")
+        logger.info(f"PATH B: OPTIMISED — Feature selection: {feature_method} (n={n_features})")
         logger.info("=" * 70)
 
         cv = StratifiedKFold(
@@ -290,32 +273,37 @@ class SVMClassifierWithCV:
             y_train = self.y[train_idx]
             y_test  = self.y[test_idx]
 
-            # Feature selection fitted ONLY on the training fold
-            selector = FeatureSelector(method=feature_method, n_features=20)
-            X_train_sel = selector.fit_transform(X_train.values, y_train)
-            X_test_sel  = X_test.iloc[:, selector.selected_features].values
+            # CRITICAL: Pipeline ensures fit_transform happens ONLY on train data.
+            # The test data is transformed using the parameters learned from the train data.
+            pipeline = Pipeline([
+                ('selector', FeatureSelector(method=feature_method, n_features=n_features)),
+                ('svm', SVC(
+                    kernel="linear", C=1.0,
+                    random_state=self.random_state,
+                    class_weight="balanced",
+                    probability=True,
+                ))
+            ])
 
-            logger.info(f"  Reduced to {X_train_sel.shape[1]} features")
+            # Fit the entire pipeline on the training fold
+            pipeline.fit(X_train.values, y_train)
+            
+            # Extract the number of features actually selected (handles LASSO edge cases)
+            n_selected = len(pipeline.named_steps['selector'].selected_features)
+            logger.info(f"  Reduced to {n_selected} features for this fold")
 
-            svm = SVC(
-                kernel="linear", C=1.0,
-                random_state=self.random_state,
-                class_weight="balanced",
-                probability=True,
-            )
-            svm.fit(X_train_sel, y_train)
-
-            y_pred       = svm.predict(X_test_sel)
-            y_pred_proba = svm.predict_proba(X_test_sel)
+            # Predict on the test fold (pipeline automatically applies the trained selector)
+            y_pred       = pipeline.predict(X_test.values)
+            y_pred_proba = pipeline.predict_proba(X_test.values)
 
             metrics = self.evaluate_predictions(y_test, y_pred, y_pred_proba)
-            metrics["n_features"]     = len(selector.selected_features)
+            metrics["n_features"]     = n_selected
             metrics["feature_method"] = feature_method
             fold_results.append(metrics)
 
             logger.info(
-                f"  Accuracy: {metrics['accuracy']:.4f} | "
-                f"MCC: {metrics['mcc']:.4f} | F1: {metrics['f1']:.4f}"
+                f"  Accuracy: {metrics['accuracy']:.4f} |  "
+                f"MCC: {metrics['mcc']:.4f} | F1: {metrics['f1']:.4f} "
             )
 
         # Key pattern: "path_b_{method}" — no orphan "path_b" key
@@ -324,7 +312,7 @@ class SVMClassifierWithCV:
         self._aggregate_cv_results(fold_results, key)
 
         logger.info("\n" + "-" * 70)
-        logger.info(f"OPTIMISED SUMMARY ({feature_method})")
+        logger.info(f"OPTIMISED SUMMARY ({feature_method}) ")
         logger.info("-" * 70)
         self._print_cv_summary(key)
 
@@ -388,7 +376,7 @@ class SVMClassifierWithCV:
             }
             comparison[key] = improvement
 
-            logger.info(f"\n{key}:")
+            logger.info(f"\n{key}: ")
             logger.info(f"  Accuracy shift : {improvement['accuracy']:+.2f}%")
             logger.info(f"  MCC shift      : {improvement['mcc']:+.2f}%")
             logger.info(f"  F1 shift       : {improvement['f1']:+.2f}%")
@@ -406,8 +394,6 @@ class SVMClassifierWithCV:
 
         timestamp = datetime.now().strftime("%Y%m%d_%H%M%S")
 
-        # Build JSON — skip any key with an empty dict (shouldn't happen now
-        # that the orphan "path_b" key is removed, but defensive)
         results_json = {
             path: {
                 "summary": data.get("summary", {}),
@@ -450,8 +436,7 @@ class SVMClassifierWithCV:
 
         self.train_path_a_baseline()
 
-        # Derive method list from FeatureSelectionPipeline so it stays in
-        # sync automatically when feature_selection.py is updated.
+        # Derive method list from FeatureSelectionPipeline so it stays in sync
         for method in FeatureSelectionPipeline.ALL_METHODS:
             try:
                 self.train_path_b_optimized(feature_method=method)
@@ -460,7 +445,6 @@ class SVMClassifierWithCV:
 
         self.compare_paths()
         self.save_results()
-
 
 # ---------------------------------------------------------------------------
 # Entry point
@@ -473,7 +457,6 @@ def main() -> None:
     )
     classifier = SVMClassifierWithCV(dataset_name="GSE42568", n_splits=5)
     classifier.run_full_pipeline()
-
 
 if __name__ == "__main__":
     main()
