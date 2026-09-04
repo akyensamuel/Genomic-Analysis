@@ -1,53 +1,93 @@
 #!/usr/bin/env python
-"""Regenerate Table 4.1 data with all variants and correct metrics."""
+"""Regenerate the GSE42568 Welch t-test extension table from fresh CV runs."""
+
+from __future__ import annotations
+
+import json
+from pathlib import Path
 
 from scripts.svm_classifier import SVMClassifierWithCV
-import json
 
-# Run all variants for filter_ttest only
-c = SVMClassifierWithCV(dataset_name='GSE42568', n_splits=5, n_features=20, p_value=0.05)
 
-variants = [
-    ('baseline', dict(apply_smote=False, tune_threshold=False, tune_c=False, alternative_classifier=None)),
-    ('smote', dict(apply_smote=True, tune_threshold=False, tune_c=False, alternative_classifier=None)),
-    ('threshold_tuned', dict(apply_smote=False, tune_threshold=True, tune_c=False, alternative_classifier=None)),
-    ('c_tuned', dict(apply_smote=False, tune_threshold=False, tune_c=True, alternative_classifier=None)),
-    ('logreg', dict(apply_smote=False, tune_threshold=False, tune_c=False, alternative_classifier='logistic_regression')),
-    ('rf', dict(apply_smote=False, tune_threshold=False, tune_c=False, alternative_classifier='random_forest')),
-]
+def summary_row(summary: dict[str, float]) -> dict[str, str]:
+    fields = ("accuracy", "recall", "specificity", "f1", "mcc", "roc_auc")
+    return {
+        field: f"{summary[f'{field}_mean']:.4f} ± {summary[f'{field}_std']:.4f}"
+        for field in fields
+    }
 
-results = {}
-for label, kwargs in variants:
-    print(f'Running {label}...')
-    c.train_path_b_optimized(feature_method='filter_ttest', n_features=20, p_value=0.05, **kwargs)
-    # Get result key
-    if kwargs['tune_threshold']:
-        key = 'path_b_filter_ttest_threshold_tuned'
-    elif kwargs['tune_c']:
-        key = 'path_b_filter_ttest_c_tuned'
-    elif kwargs['alternative_classifier']:
-        key = f'path_b_filter_ttest_{kwargs["alternative_classifier"]}'
+
+def run_variant(classifier: SVMClassifierWithCV, label: str, **kwargs) -> dict:
+    classifier.train_path_b_optimized(
+        feature_method="filter_ttest",
+        n_features=20,
+        p_value=0.05,
+        **kwargs,
+    )
+
+    if kwargs.get("tune_threshold"):
+        key = "path_b_filter_ttest_threshold_tuned"
+    elif kwargs.get("tune_k_candidates") is not None:
+        key = "path_b_filter_ttest_k_tuned"
+    elif kwargs.get("tune_c"):
+        key = "path_b_filter_ttest_c_tuned"
+    elif kwargs.get("alternative_classifier"):
+        key = f"path_b_filter_ttest_{kwargs['alternative_classifier']}"
     else:
-        key = 'path_b_filter_ttest'
-    
-    if key in c.results:
-        r = c.results[key]['summary']
-        results[label] = {
-            'accuracy': f"{r.get('accuracy_mean', 0):.4f} ± {r.get('accuracy_std', 0):.4f}",
-            'recall': f"{r.get('recall_mean', 0):.4f} ± {r.get('recall_std', 0):.4f}",
-            'specificity': f"{r.get('specificity_mean', 0):.4f} ± {r.get('specificity_std', 0):.4f}",
-            'f1': f"{r.get('f1_mean', 0):.4f} ± {r.get('f1_std', 0):.4f}",
-            'mcc': f"{r.get('mcc_mean', 0):.4f} ± {r.get('mcc_std', 0):.4f}",
-            'roc_auc': f"{r.get('roc_auc_mean', 0):.4f} ± {r.get('roc_auc_std', 0):.4f}",
-        }
-        print(f'{label}: done')
-    else:
-        print(f'Warning: {key} not found in results')
+        key = "path_b_filter_ttest"
 
-print("\n=== RESULTS ===")
-print(json.dumps(results, indent=2))
+    result = classifier.results[key]
+    row = summary_row(result["summary"])
+    if kwargs.get("tune_k_candidates") is not None:
+        row["selected_k_per_fold"] = [
+            int(fold["selected_k"]) for fold in result["fold_results"]
+        ]
+    print(f"{label}: {json.dumps(row)}")
+    return row
 
-# Also create LaTeX table code
-print("\n=== LaTeX TABLE CODE ===")
-for label, metrics in results.items():
-    print(f"{label.replace('_', ' ').title()} & {metrics['accuracy']} & {metrics['recall']} & {metrics['specificity']} & {metrics['f1']} & {metrics['mcc']} & {metrics['roc_auc']} \\\\")
+
+def main() -> None:
+    classifier = SVMClassifierWithCV(
+        dataset_name="GSE42568",
+        n_splits=5,
+        random_state=42,
+        n_features=20,
+        p_value=0.05,
+    )
+    variants = [
+        ("baseline", dict()),
+        ("smote", dict(apply_smote=True)),
+        ("threshold_tuned", dict(tune_threshold=True)),
+        ("c_tuned", dict(tune_c=True)),
+        ("logreg", dict(alternative_classifier="logistic_regression")),
+        ("rf", dict(alternative_classifier="random_forest")),
+        ("k_tuned", dict(tune_k_candidates=[10, 20, 50, 100])),
+    ]
+
+    results = {
+        label: run_variant(classifier, label, **kwargs)
+        for label, kwargs in variants
+    }
+    output_path = Path("results") / "GSE42568_breast_cancer" / "table41_regenerated.json"
+    output_path.write_text(json.dumps(results, indent=2) + "\n", encoding="utf-8")
+
+    print("\n=== LaTeX rows ===")
+    labels = {
+        "baseline": "Baseline (default threshold, $k=20$)",
+        "smote": "SMOTE inside CV folds",
+        "threshold_tuned": "Threshold tuned (Youden $J$)",
+        "c_tuned": "$C$ tuned by inner CV",
+        "logreg": "Logistic regression check",
+        "rf": "Random-forest check",
+        "k_tuned": "$k$ tuned by inner CV",
+    }
+    for label, row in results.items():
+        print(
+            f"{labels[label]} & {row['accuracy']} & {row['recall']} & "
+            f"{row['specificity']} & {row['f1']} & {row['mcc']} & "
+            f"{row['roc_auc']} " + r"\\\\"
+        )
+
+
+if __name__ == "__main__":
+    main()

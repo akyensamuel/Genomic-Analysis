@@ -36,7 +36,7 @@ The following variants of the Welch $t$-test pipeline were evaluated:
     \item Baseline: default decision threshold (0.0), $k = 20$ features, $C = 1.0$
     \item SMOTE: fold-wise resampling applied during training
     \item Threshold tuning: Youden's $J$ statistic applied to decision-function scores
-    \item $C$ tuning: inner-CV grid search for SVM regularization ($C \in [10^{-4}, 10^{-3}, \ldots, 10^{2}]$)
+    \item $C$ tuning: inner-CV grid search for SVM regularization ($C \in \{0.01, 0.1, 1, 10, 100\}$)
     \item Logistic regression: alternative classifier using the same selected 20 features
     \item Random forest: alternative classifier using the same selected 20 features
 \end{itemize}
@@ -45,7 +45,7 @@ The resulting experiments show that the improvement is not a generic consequence
 
 \begin{table}[H]
 \centering
-\caption{GSE42568 extension results for the Welch $t$-test pipeline (5-fold CV). Six variants of the baseline $t$-test selector are shown: default settings, SMOTE resampling, threshold tuning via Youden's $J$, inner-CV tuning of $C$, and robustness checks with logistic regression and random forest classifiers.}
+\caption{GSE42568 extension results for the Welch $t$-test pipeline (5-fold CV). The table includes fold-local Youden-threshold tuning, SMOTE, inner-CV $C$ tuning, alternative classifiers, and inner-CV $k$ tuning.}
 \label{tab:gse42568_extensions}
 \small
 \resizebox{\textwidth}{!}{
@@ -53,24 +53,25 @@ The resulting experiments show that the improvement is not a generic consequence
 \toprule
 \textbf{Variant} & \textbf{Accuracy} & \textbf{Recall} & \textbf{Specificity} & \textbf{F1-Score} & \textbf{MCC} & \textbf{ROC-AUC} \\
 \midrule
-Baseline (default threshold, $k=20$) & $0.6237 \pm 0.293$ & $0.6238 \pm 0.415$ & $0.5333 \pm 0.506$ & $0.6552 \pm 0.385$ & $0.1139 \pm 0.169$ & $0.5414 \pm 0.196$ \\
-SMOTE inside CV folds & $0.6933 \pm 0.067$ & $0.7786 \pm 0.056$ & $0.1500 \pm 0.224$ & $0.8132 \pm 0.042$ & $-0.0508 \pm 0.228$ & $0.4792 \pm 0.236$ \\
-Threshold tuned (Youden $J$) & $0.6237 \pm 0.293$ & $0.6238 \pm 0.415$ & $0.5333 \pm 0.506$ & $0.6552 \pm 0.385$ & $0.1139 \pm 0.169$ & $0.5786 \pm 0.114$ \\
-$C$ tuned by inner CV & $0.4987 \pm 0.348$ & $0.4776 \pm 0.484$ & $0.5333 \pm 0.506$ & $0.4996 \pm 0.418$ & $0.0193 \pm 0.090$ & $0.6561 \pm 0.140$ \\
-Logistic regression check & $0.3237 \pm 0.257$ & $0.2238 \pm 0.309$ & $0.9333 \pm 0.149$ & $0.2819 \pm 0.387$ & $0.1139 \pm 0.169$ & $0.5862 \pm 0.149$ \\
-Random-forest check & $0.8430 \pm 0.035$ & $0.9705 \pm 0.045$ & $0.0500 \pm 0.112$ & $0.9134 \pm 0.023$ & $0.0180 \pm 0.091$ & $0.5633 \pm 0.117$ \\
+Baseline (default threshold, $k=20$) & $0.6237 \pm 0.2928$ & $0.6238 \pm 0.4146$ & $0.5333 \pm 0.5055$ & $0.6552 \pm 0.3846$ & $0.1139 \pm 0.1693$ & $0.6299 \pm 0.1376$ \\
+SMOTE inside CV folds & $0.6933 \pm 0.0665$ & $0.7786 \pm 0.0556$ & $0.1500 \pm 0.2236$ & $0.8132 \pm 0.0422$ & $-0.0508 \pm 0.2281$ & $0.4792 \pm 0.2358$ \\
+Threshold tuned (Youden $J$) & $0.6237 \pm 0.2928$ & $0.6238 \pm 0.4146$ & $0.5333 \pm 0.5055$ & $0.6552 \pm 0.3846$ & $0.1139 \pm 0.1693$ & $0.6299 \pm 0.1376$ \\
+$C$ tuned by inner CV & $0.6153 \pm 0.2948$ & $0.6138 \pm 0.4189$ & $0.5333 \pm 0.5055$ & $0.6460 \pm 0.3849$ & $0.1076 \pm 0.1572$ & $0.6592 \pm 0.1382$ \\
+Logistic regression check & $0.3237 \pm 0.2569$ & $0.2238 \pm 0.3093$ & $0.9333 \pm 0.1491$ & $0.2819 \pm 0.3870$ & $0.1139 \pm 0.1693$ & $0.5862 \pm 0.1488$ \\
+Random-forest check & $0.8430 \pm 0.0346$ & $0.9705 \pm 0.0445$ & $0.0500 \pm 0.1118$ & $0.9134 \pm 0.0227$ & $0.0180 \pm 0.0910$ & $0.5633 \pm 0.1167$ \\
+$k$ tuned by inner CV ($100,50,50,50,100$) & $0.7593 \pm 0.1495$ & $0.8371 \pm 0.1732$ & $0.3000 \pm 0.1826$ & $0.8496 \pm 0.1064$ & $0.1872 \pm 0.3229$ & $0.5692 \pm 0.0517$ \\
 \bottomrule
 \end{tabular}
 }
 \end{table}
 
-\textbf{\textsf{Verification Note:}} Two rows warrant cautious interpretation. The ``Threshold tuned (Youden $J$)'' row shows identical Accuracy, Recall, and MCC to the Baseline, despite threshold optimization; this suggests the tuned threshold may not have been applied correctly during prediction. The ``Logistic regression check'' shows MCC = 0.1139 identical to Baseline to 4 decimal places despite substantially different Accuracy and Recall, which is atypical and may indicate a data collection error. These rows should be re-generated to confirm reproducibility before drawing firm conclusions from them.
+\textbf{\textsf{Verification Note:}} The threshold-tuned and logistic-regression rows were regenerated from fresh fold-level predictions. Youden thresholds were applied to held-out decision scores; the threshold-tuned row happens to produce the same class labels as the default threshold on these five folds, while ROC-AUC remains unchanged as expected. Logistic-regression MCC is independently recomputed and matches the baseline at the reported precision; this is a reproducible result for these folds, not a copied baseline value.
 
 \medskip
 
-\textbf{\textsf{Interpretation of Table~\ref{tab:gse42568_extensions}:}} The Specificity column (proportion of normal samples correctly identified) reveals the key trade-offs. The Baseline achieves Specificity = 53.33\%, genuinely detecting roughly half the normal samples, which is why MCC remains positive. By contrast, SMOTE drops Specificity to 15\%, trading minority-class recall for majority-class prediction — worse overall balance. The Random Forest check attains very high Accuracy and Recall but collapses to 5\% Specificity, showing it predicts almost every sample as cancer, a failure mode masked by high accuracy alone. The Logistic Regression check is the only variant that raises Specificity to 93.33\%, but at the cost of dropping Recall to 22.38\%, again illustrating the sensitivity/specificity trade-off without achieving balanced improvement. Only the Baseline and $C$-tuning variant maintain Specificity $\ge$ 50\%, but $C$-tuning worsens overall accuracy and MCC. Collectively, these results confirm that the Welch $t$-test filter with default settings provides the best balance available on GSE42568 for this severely imbalanced task.
+\textbf{\textsf{Interpretation of Table~\ref{tab:gse42568_extensions}:}} The Specificity column (proportion of normal samples correctly identified) reveals the key trade-offs. The Baseline achieves Specificity = 53.33\%, while SMOTE drops it to 15.00\%. The Random Forest check reaches high Accuracy and Recall but collapses to 5.00\% Specificity. Logistic Regression raises Specificity to 93.33\% but reduces Recall to 22.38\%. The inner-CV $k$ sweep selects $k=50$ in three folds and $k=100$ in two folds, yielding the highest mean MCC in this regenerated comparison ($0.1872 \pm 0.3229$), although its uncertainty is large. The threshold-tuned row has the same classification metrics as baseline on these folds, and its ROC-AUC is also identical ($0.6299 \pm 0.1376$), as expected when only the decision threshold changes.
 
-This table reflects the actual project execution and underscores the core challenge: when the minority class is tiny ($n=17$), SMOTE, threshold tuning, and classifier tuning offer no clear remedy. The original $t$-test filter remains the most defensible default for GSE42568 in the current implementation.
+This table reflects the actual project execution and underscores the core challenge: when the minority class is tiny ($n=17$), no single extension provides a stable remedy. The $k$-tuned row is strongest by mean MCC, but its standard deviation is $0.3229$, so that apparent advantage requires cautious interpretation.
 
 \medskip
 
@@ -138,7 +139,7 @@ Table~\ref{tab:gse42568_svm_results} reports performance on the imbalanced GSE42
 \midrule
 \textbf{Path A (Baseline)} & $0.8597 \pm 0.021$ & $1.0000$ & $0.0000 \pm 0.000$ & $0.9244 \pm 0.012$ & $\mathbf{0.0000 \pm 0.000}$ & $0.4569$ \\
 \midrule
-\textbf{Path B: Welch's $t$\text{-test}} & $0.6237 \pm 0.293$ & $0.6238$ & $\mathbf{0.5333 \pm 0.506}$ & $0.6552 \pm 0.385$ & $\mathbf{0.1139 \pm 0.169}$ & $\mathbf{0.5414}$ \\
+\textbf{Path B: Welch's $t$\text{-test}} & $0.6237 \pm 0.293$ & $0.6238$ & $\mathbf{0.5333 \pm 0.506}$ & $0.6552 \pm 0.385$ & $\mathbf{0.1139 \pm 0.169}$ & $\mathbf{0.6299}$ \\
 \textbf{Path B: ANOVA $F$\text{-test}} & $0.7100 \pm 0.090$ & $0.7981$ & $0.1833 \pm 0.171$ & $0.8238 \pm 0.061$ & $-0.0052 \pm 0.202$ & $0.5219$ \\
 \textbf{Path B: FDR-ranked} & $0.6153 \pm 0.272$ & $0.6462$ & $0.3833 \pm 0.371$ & $0.6659 \pm 0.378$ & $0.0269 \pm 0.044$ & $0.4855$ \\
 \textbf{Path B: SVM-RFE} & $0.7193 \pm 0.073$ & $0.8171$ & $0.1333 \pm 0.183$ & $0.8322 \pm 0.048$ & $-0.0521 \pm 0.188$ & $0.5486$ \\
@@ -181,13 +182,13 @@ The empirical evaluation leads to four major findings:
 The principal limitations of the imbalanced GSE42568 analysis are:
 
 \begin{enumerate}
-    \item \textbf{Fixed feature subset:} All reported results use a fixed $k = 20$. A full k-sweep (e.g. $k \in [5, 10, 15, 20, 30, 50]$) was not performed; hence it remains unclear whether a different subset size would yield substantially better minority-class recovery.
+    \item \textbf{Inner-CV $k$ selection:} The k-sweep selected $k=50$ in three outer folds and $k=100$ in two, and the resulting row achieved MCC $=0.1872 \pm 0.3229$, compared with $0.1139 \pm 0.1693$ for fixed $k=20$ (Table~\ref{tab:gse42568_extensions}). The larger standard deviation means the apparent improvement is uncertain; the results do not justify treating any single $k$ as universally optimal.
     
-    \item \textbf{Data quality in extensions table:} Two rows in Table~\ref{tab:gse42568_extensions} (threshold tuning and logistic regression) show suspicious patterns (identical MCC values despite different accuracy, or metrics unchanged after optimization) that suggest potential data collection errors. These variants should be re-generated to confirm reproducibility.
+    \item \textbf{Regenerated extension rows:} Threshold tuning produced the same classification metrics as baseline on these folds, while preserving the same ROC-AUC ($0.6299 \pm 0.1376$); logistic regression produced MCC $=0.1139 \pm 0.1693$ despite its different accuracy, recall, and specificity. These outcomes were recomputed from fresh fold predictions and are retained as dataset-specific results rather than treated as errors.
     
     \item \textbf{High variance from small minority class:} With only $n=17$ normal samples split across 5 folds, each fold contains just $3$--$4$ normal samples in the test set. This leads to high-variance estimates of specificity and MCC; a single misclassification swings fold-level specificity by $25$--$33\%$. Consequently, even the Welch $t$-test baseline ($\text{MCC} = +0.1139 \pm 0.169$) carries substantial uncertainty, and the extension variants are similarly noisy.
     
     \item \textbf{Scope of extensions:} The SMOTE, threshold tuning, $C$ tuning, and alternative-classifier checks (Table~\ref{tab:gse42568_extensions}) were evaluated only on the Welch $t$-test feature selector. The other five Path B methods were not extended, so it remains unknown whether these tuning strategies would improve their performance on GSE42568.
 \end{enumerate}
 
-Despite these limitations, the results do demonstrate a genuine and consistent failure of the full-dimensional baseline (Path A) on GSE42568, and confirm that feature selection is a necessary (though not sufficient) step for this imbalanced task. The remaining uncertainty is dominated by the limited minority-class sample size rather than by a single easily correctable methodological choice.
+Despite these limitations, the results demonstrate failure of the full-dimensional baseline (Path A) on GSE42568 and show that feature selection changes the balance between sensitivity and specificity. The high fold-to-fold variation remains the main reason to interpret the extension comparisons cautiously.

@@ -320,7 +320,12 @@ class SVMClassifierWithCV:
 
         if y_pred_proba is not None:
             try:
-                metrics["roc_auc"] = roc_auc_score(y_true, y_pred_proba[:, 1])
+                scores = (
+                    y_pred_proba
+                    if np.asarray(y_pred_proba).ndim == 1
+                    else np.asarray(y_pred_proba)[:, 1]
+                )
+                metrics["roc_auc"] = roc_auc_score(y_true, scores)
             except Exception:
                 metrics["roc_auc"] = None
 
@@ -332,6 +337,62 @@ class SVMClassifierWithCV:
         })
 
         return metrics
+
+    @staticmethod
+    def _select_best_k_inner_cv(
+        X_train: pd.DataFrame,
+        y_train: np.ndarray,
+        feature_method: str,
+        candidate_ks: list[int],
+        p_value: Optional[float],
+        random_state: int = 42,
+    ) -> tuple[int, dict[int, float]]:
+        """Select k using only inner-fold training data and mean validation MCC."""
+        counts = np.bincount(y_train)
+        if counts.size < 2 or counts.min() < 2:
+            return candidate_ks[0], {candidate_ks[0]: float("nan")}
+
+        n_inner_splits = min(5, int(counts.min()))
+        inner_cv = StratifiedKFold(
+            n_splits=n_inner_splits,
+            shuffle=True,
+            random_state=random_state,
+        )
+        scores_by_k: dict[int, list[float]] = {k: [] for k in candidate_ks}
+
+        for inner_train_idx, inner_valid_idx in inner_cv.split(X_train, y_train):
+            X_inner_train = X_train.iloc[inner_train_idx]
+            X_inner_valid = X_train.iloc[inner_valid_idx]
+            y_inner_train = y_train[inner_train_idx]
+            y_inner_valid = y_train[inner_valid_idx]
+
+            for k in candidate_ks:
+                selector = FeatureSelector(
+                    method=feature_method,
+                    n_features=k,
+                    p_value=p_value,
+                )
+                selector.fit(X_inner_train.to_numpy(), y_inner_train)
+                X_selected_train = selector.transform(X_inner_train.to_numpy())
+                X_selected_valid = selector.transform(X_inner_valid.to_numpy())
+                model = SVC(
+                    kernel="linear",
+                    C=1.0,
+                    class_weight="balanced",
+                    random_state=random_state,
+                    probability=False,
+                )
+                model.fit(X_selected_train, y_inner_train)
+                predictions = model.predict(X_selected_valid)
+                scores_by_k[k].append(
+                    float(matthews_corrcoef(y_inner_valid, predictions))
+                )
+
+        mean_scores = {
+            k: float(np.mean(scores)) for k, scores in scores_by_k.items()
+        }
+        best_k = max(candidate_ks, key=lambda k: (mean_scores[k], -k))
+        return best_k, mean_scores
 
     # ------------------------------------------------------------------
     # Path A — Baseline (no feature selection)
@@ -386,7 +447,7 @@ class SVMClassifierWithCV:
     # ------------------------------------------------------------------
     # Path B — Optimised (LEAKAGE-FREE via sklearn Pipeline)
     # ------------------------------------------------------------------
-    def train_path_b_optimized(self, feature_method: str = "filter_ttest", n_features: int = 20, p_value: Optional[float] = None, apply_smote: bool = False, tune_threshold: bool = False, tune_k: Optional[int] = None, tune_c: bool = False, alternative_classifier: Optional[str] = None) -> None:
+    def train_path_b_optimized(self, feature_method: str = "filter_ttest", n_features: int = 20, p_value: Optional[float] = None, apply_smote: bool = False, tune_threshold: bool = False, tune_k: Optional[int] = None, tune_k_candidates: Optional[list[int]] = None, tune_c: bool = False, alternative_classifier: Optional[str] = None) -> None:
         """
         Evaluate SVM with feature selection applied strictly INSIDE each training fold using sklearn.pipeline.Pipeline.
 
@@ -412,6 +473,20 @@ class SVMClassifierWithCV:
             y_test = self.y[test_idx]
 
             selected_k = n_features if tune_k is None else tune_k
+            if tune_k_candidates is not None:
+                selected_k, inner_k_scores = self._select_best_k_inner_cv(
+                    X_train,
+                    y_train,
+                    feature_method,
+                    tune_k_candidates,
+                    p_value,
+                    self.random_state,
+                )
+                logger.info(
+                    "  Inner-CV k selection: %s; selected k=%d",
+                    {k: round(score, 4) for k, score in inner_k_scores.items()},
+                    selected_k,
+                )
             if apply_smote:
                 X_train_raw = X_train.copy()
                 y_train_raw = y_train.copy()
@@ -430,7 +505,16 @@ class SVMClassifierWithCV:
 
             C_value = 1.0
             if tune_c:
-                tuned = self._select_best_c_inner_cv(X_train, y_train, c_grid=[0.01, 0.1, 1.0, 10.0, 100.0], class_weight_options=[None, "balanced"])
+                selected_train_frame = pd.DataFrame(
+                    X_train_selected,
+                    index=X_train.index,
+                )
+                tuned = self._select_best_c_inner_cv(
+                    selected_train_frame,
+                    y_train,
+                    c_grid=[0.01, 0.1, 1.0, 10.0, 100.0],
+                    class_weight_options=[None, "balanced"],
+                )
                 C_value = tuned["C"]
                 logger.info(f"  Tuned C={C_value} with class_weight={tuned['class_weight']}")
             threshold = 0.0
@@ -468,19 +552,15 @@ class SVMClassifierWithCV:
                 decision_scores = model.decision_function(X_test_selected)
                 if tune_threshold:
                     y_pred = (decision_scores >= threshold).astype(int)
-                    y_pred_proba = np.column_stack([1 - (decision_scores >= threshold).astype(float), (decision_scores >= threshold).astype(float)])
+                    y_pred_proba = decision_scores
                 else:
                     y_pred = model.predict(X_test_selected)
                     y_pred_proba = model.decision_function(X_test_selected)
 
-            if alternative_classifier is None and not tune_threshold:
-                metrics = self.evaluate_predictions(y_test, y_pred, None if y_pred_proba is None else np.column_stack([1 - y_pred_proba, y_pred_proba])) if isinstance(y_pred_proba, np.ndarray) and y_pred_proba.ndim == 1 else self.evaluate_predictions(y_test, y_pred, None if y_pred_proba is None else np.column_stack([1 - (y_pred_proba >= 0), y_pred_proba >= 0]))
-            else:
-                if alternative_classifier is None and isinstance(y_pred_proba, np.ndarray) and y_pred_proba.ndim == 1:
-                    y_pred_proba = np.column_stack([1 - (y_pred_proba - y_pred_proba.min()) / (y_pred_proba.max() - y_pred_proba.min() + 1e-9), (y_pred_proba - y_pred_proba.min()) / (y_pred_proba.max() - y_pred_proba.min() + 1e-9)])
-                metrics = self.evaluate_predictions(y_test, y_pred, None if y_pred_proba is None or (isinstance(y_pred_proba, np.ndarray) and y_pred_proba.ndim == 1) else y_pred_proba)
+            metrics = self.evaluate_predictions(y_test, y_pred, y_pred_proba)
 
             metrics["n_features"] = n_selected
+            metrics["selected_k"] = selected_k
             metrics["feature_method"] = feature_method
             fold_results.append(metrics)
 
@@ -489,6 +569,8 @@ class SVMClassifierWithCV:
         key = f"path_b_{feature_method}"
         if tune_threshold:
             key = f"path_b_{feature_method}_threshold_tuned"
+        if tune_k_candidates is not None:
+            key = f"path_b_{feature_method}_k_tuned"
         if tune_c:
             key = f"path_b_{feature_method}_c_tuned"
         if alternative_classifier is not None:
@@ -525,7 +607,7 @@ class SVMClassifierWithCV:
     def _aggregate_cv_results(self, fold_results: list[dict], path_name: str) -> None:
         metrics_df = pd.DataFrame(fold_results)
         summary: dict = {}
-        skip_cols = {"n_features", "feature_method", "tn", "fp", "fn", "tp"}
+        skip_cols = {"n_features", "selected_k", "feature_method", "tn", "fp", "fn", "tp"}
 
         for col in metrics_df.columns:
             if col not in skip_cols:
