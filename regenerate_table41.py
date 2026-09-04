@@ -38,6 +38,22 @@ def run_variant(classifier: SVMClassifierWithCV, label: str, **kwargs) -> dict:
 
     result = classifier.results[key]
     row = summary_row(result["summary"])
+    if label in {"baseline", "threshold_tuned", "logreg"}:
+        row["fold_audit"] = [
+            {
+                "fold": fold_number,
+                "tn": int(fold["tn"]),
+                "fp": int(fold["fp"]),
+                "fn": int(fold["fn"]),
+                "tp": int(fold["tp"]),
+                **(
+                    {"youden_threshold": float(fold["youden_threshold"])}
+                    if "youden_threshold" in fold
+                    else {}
+                ),
+            }
+            for fold_number, fold in enumerate(result["fold_results"], 1)
+        ]
     if kwargs.get("tune_k_candidates") is not None:
         row["selected_k_per_fold"] = [
             int(fold["selected_k"]) for fold in result["fold_results"]

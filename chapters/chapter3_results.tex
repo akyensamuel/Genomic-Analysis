@@ -21,6 +21,7 @@ Table~\ref{tab:feature_selection_counts} summarizes the comparison-stage results
 \centering
 \caption{Feature-selection summary from the regenerated comparison runs.}
 \label{tab:feature_selection_counts}
+\resizebox{\textwidth}{!}{
 \begin{tabular}{llcc}
 \toprule
 \textbf{Category} & \textbf{Method Key} & \textbf{Selected Probes} & \textbf{Reduction (\%)} \\
@@ -33,6 +34,7 @@ Wrapper  & \texttt{wrapper\_rf} (RF Importance) & 50 & 99.91\% \\
 Embedded & \texttt{embedded\_lasso} (LASSO $L_1$) & 33 on GSE19804; 25 on GSE42568 & 99.94\% / 99.95\% \\
 \bottomrule
 \end{tabular}
+}
 \end{table}
 
 This table reflects the actual regenerated outputs: on GSE19804 the FDR-ranked selector remained a valid top-50 method, whereas on the more imbalanced GSE42568 dataset it retained only two features after BH FDR correction, a result which is consistent with the strict statistical criterion and the reduced evidence available in the minority class.

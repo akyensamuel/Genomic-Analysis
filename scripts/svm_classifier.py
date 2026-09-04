@@ -562,6 +562,8 @@ class SVMClassifierWithCV:
             metrics["n_features"] = n_selected
             metrics["selected_k"] = selected_k
             metrics["feature_method"] = feature_method
+            if tune_threshold:
+                metrics["youden_threshold"] = float(threshold)
             fold_results.append(metrics)
 
             logger.info(f"  Accuracy: {metrics['accuracy']:.4f} | MCC: {metrics['mcc']:.4f} | Specificity: {metrics.get('specificity', 0.0):.4f}")
@@ -607,7 +609,16 @@ class SVMClassifierWithCV:
     def _aggregate_cv_results(self, fold_results: list[dict], path_name: str) -> None:
         metrics_df = pd.DataFrame(fold_results)
         summary: dict = {}
-        skip_cols = {"n_features", "selected_k", "feature_method", "tn", "fp", "fn", "tp"}
+        skip_cols = {
+            "n_features",
+            "selected_k",
+            "feature_method",
+            "youden_threshold",
+            "tn",
+            "fp",
+            "fn",
+            "tp",
+        }
 
         for col in metrics_df.columns:
             if col not in skip_cols:
