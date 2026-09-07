@@ -1,0 +1,145 @@
+\chapter{Literature Review}
+
+\section{Introduction}
+
+High-dimensional gene expression data have become an important source of information for studying biological processes and disease. The development of high-throughput genomic technologies has made it possible to measure the expression levels of thousands of genes simultaneously. However, the resulting datasets often contain a very large number of features relative to the number of available samples. This characteristic creates challenges for statistical analysis and machine learning, particularly in classification problems.
+
+Feature selection has therefore become an important component of high-dimensional data analysis. Rather than using all available genes, feature selection aims to identify a smaller subset of relevant features while removing irrelevant and redundant variables. This can reduce computational complexity, improve model interpretability, and potentially improve classification performance (\cite{venkatesh2019review,li2017feature,kumar2014feature}).
+
+This chapter reviews the literature relevant to feature selection in high-dimensional gene expression classification. It first discusses the high-dimensional nature of gene expression data and the associated challenges. The main categories of feature selection methods are then examined, followed by their application to genomic and cancer classification. Finally, previous comparative studies are considered and the research gap motivating the present study is identified.
+
+\section{High-Dimensional Gene Expression Data}
+
+Gene expression datasets generated using high-throughput technologies can contain measurements for thousands of genes across a relatively small number of biological samples. Consequently, such datasets commonly exhibit the high-dimensional, low-sample-size (HDLSS) property, in which the number of features is considerably greater than the number of observations.
+
+Let a gene expression dataset be represented by a matrix
+
+$$
+X \in \mathbb{R}^{n \times p},
+$$
+
+where $n$ represents the number of samples and $p$ represents the number of measured genes or features. In high-dimensional genomic studies, it is common for
+
+$$
+p \gg n.
+$$
+
+The large number of features presents several challenges for classification. Shroff and Maheta (\cite{shroff_comparative_2015} )discuss feature selection in high-dimensional datasets as a means of improving classification performance by reducing the number of variables used by the classifier. Similarly, research on high-dimensional classification has highlighted the importance of reducing the feature space when the number of variables is substantially larger than the number of observations (\cite{noauthor_high_2018}).
+
+One important challenge is the \textit{curse of dimensionality}. As the number of dimensions increases, observations become increasingly sparse in the feature space, making statistical learning and pattern recognition more difficult (\cite{venkatesh2019review}). In gene expression data, the problem is further complicated by the presence of irrelevant and redundant genes. Genes involved in related biological processes may exhibit correlated expression patterns, meaning that multiple variables may provide similar information. At the same time, many measured genes may have little relevance to the classification task.
+
+The combination of a large feature space, relatively few samples, and irrelevant or redundant variables can increase computational requirements and make models more susceptible to overfitting. These characteristics provide the main motivation for applying feature selection before classification.
+
+\section{Feature Selection}
+
+Feature selection refers to the process of selecting a subset of relevant features from the original feature set while removing variables that contribute little or redundant information. It differs from dimensionality reduction methods that transform the original variables into a new set of features. Feature selection instead retains a subset of the original variables, which can be useful when interpretability of individual genes is important.
+
+Feature selection has been widely studied as a means of addressing high-dimensional classification problems. Tang, Alelyani, and Liu (\cite{tang2013feature}) describe feature selection as an approach for reducing the feature space and improving the effectiveness of classification algorithms. Li et al. (\cite{li2017feature}) provide a broader data-oriented perspective, emphasizing that feature selection involves considerations related to the data, the selection procedure, and the learning task.
+
+A general feature selection procedure can be viewed as searching for a subset of the original feature set that provides a suitable balance between predictive performance and model complexity. If the original feature set contains $p$ variables, there are theoretically
+
+$$
+2^p
+$$
+
+possible subsets. Exhaustively evaluating all possible subsets therefore becomes impractical when $p$ is very large. Feature selection methods consequently employ different strategies to identify useful subsets without evaluating the entire search space (\cite{tang2013feature}).
+
+\section{Categories of Feature Selection Methods}
+
+Feature selection methods are commonly divided into three major categories: filter, wrapper, and embedded methods (\cite{venkatesh2019review,tang2013feature,kumar2014feature}).
+
+\subsection{Filter Methods}
+
+Filter methods evaluate features using characteristics of the data without directly depending on a particular classification algorithm. Statistical or information-theoretic measures are used to rank or select variables before a classifier is trained.
+
+Ferreira and Figueiredo (\cite{ferreira_efficient_2012}) investigated efficient feature selection filters for high-dimensional data and emphasized the importance of computational efficiency when dealing with large numbers of variables. The principal advantage of filter approaches is that they can examine a very large feature space without repeatedly training a classifier.
+
+Common filter approaches include statistical tests, information gain, Fisher scores, and other measures of feature relevance. In a classification setting, statistical tests can be used to determine whether the distribution of a feature differs significantly between classes. Features can then be ranked according to their statistical evidence and a specified number of the highest-ranked features retained.
+
+The main strengths of filter methods are their relatively low computational cost and scalability to high-dimensional datasets. However, because they generally evaluate features independently of the final classifier, a feature that appears statistically relevant may not necessarily produce the best classification performance when combined with other selected features.
+
+\subsection{Wrapper Methods}
+
+Wrapper methods evaluate candidate feature subsets according to the performance of a learning algorithm. Instead of assessing features independently, the feature selection procedure uses a classifier as part of the selection process (\cite{tang2013feature}).
+
+One important example is Support Vector Machine Recursive Feature Elimination (SVM-RFE), introduced by Guyon et al. (\cite{guyon_gene_2002}). SVM-RFE repeatedly trains an SVM and removes features considered least important according to the magnitude of their corresponding classifier weights. The process continues until a desired number of features remains.
+
+The advantage of wrapper methods is that feature selection is directly related to the classifier being used. This can result in feature subsets that are particularly suitable for the learning algorithm. However, the repeated training and evaluation of models can make wrapper methods computationally expensive, especially when the original dataset contains tens of thousands of genes.
+
+The work of Guyon et al. (\cite{guyon_gene_2002}) demonstrated the usefulness of SVM-based feature selection for cancer classification. Their study showed that gene selection could substantially reduce the number of genes required for classification while maintaining strong predictive performance.
+
+\subsection{Embedded Methods}
+
+Embedded methods perform feature selection as part of the model-training process. Unlike wrapper methods, which repeatedly evaluate externally generated subsets, embedded methods incorporate the selection mechanism directly into the learning algorithm (\cite{venkatesh2019review}).
+
+LASSO is a prominent example. It introduces an $L_1$ penalty into the optimization problem, encouraging some model coefficients to become exactly zero. Features associated with zero coefficients can consequently be excluded from the final model.
+
+Random Forests provide another approach through measures of feature importance. These measures can be used to rank variables according to their contribution to the fitted ensemble model.
+
+Embedded methods therefore provide a compromise between the computational efficiency of filter approaches and the model-specific nature of wrapper approaches. However, their effectiveness depends on the underlying learning algorithm and the characteristics of the dataset (\cite{tang2013feature,li2017feature}).
+
+\section{Feature Selection for Cancer Classification}
+
+The application of feature selection to gene expression data is particularly important in cancer classification. Gene expression profiles can contain thousands of measurements, while the number of available patient samples may be comparatively small. Selecting a smaller set of genes can therefore help construct classification models that are more manageable and potentially more interpretable.
+
+An influential early study by Golub et al. demonstrated the use of gene expression profiles for molecular classification of cancer, distinguishing between acute lymphoblastic leukemia (ALL) and acute myeloid leukemia (AML). This work provided an important demonstration of the potential of gene expression measurements for distinguishing disease classes.
+
+Subsequent research investigated feature selection as a means of improving classification from such high-dimensional molecular data. Guyon et al. (\cite{guyon_gene_2002}), for example, applied SVM-based recursive feature elimination to cancer classification and demonstrated that informative gene subsets could be obtained while substantially reducing the dimensionality of the original data.
+
+The problem is not limited to binary cancer classification. García-Díaz et al. (\cite{garcia-diaz_unsupervised_2020}) investigated feature selection for multiclass cancer classification using gene expression RNA-seq data. Their results demonstrate that feature selection can be incorporated into genomic classification frameworks involving multiple cancer classes.
+
+These studies collectively demonstrate that classification using gene expression data does not necessarily require the complete set of measured genes. Instead, a relatively small subset may contain sufficient information for distinguishing between disease classes.
+
+\section{Comparative Studies of Feature Selection Methods}
+
+Because different feature selection approaches use different criteria for identifying relevant variables, their effectiveness can vary according to the dataset and classification problem. Consequently, several studies have compared different feature selection techniques rather than assuming that one method is universally superior.
+
+Shroff and Maheta (\cite{shroff_comparative_2015}) conducted a comparative study of feature selection techniques for high-dimensional datasets, with particular attention to their effect on classification accuracy. Their work highlights the importance of evaluating feature selection methods in conjunction with classification performance rather than considering feature reduction alone.
+
+Venkatesh and Anuradha (\cite{venkatesh2019review}) reviewed a broad range of feature selection methods and emphasized the differences between filter, wrapper, and embedded approaches. Their review illustrates the trade-offs between computational efficiency, predictive performance, and dependence on a particular learning algorithm.
+
+Similarly, Kumar and Minz (\cite{kumar2014feature}) reviewed feature selection methods and identified the computational complexity associated with evaluating large feature spaces as an important consideration. These reviews suggest that the choice of feature selection method should depend on the characteristics of the dataset and the requirements of the classification task.
+
+Research has also considered feature selection specifically in high-dimensional sequencing data. Källberg, Vidman, and Rydén (\cite{kallberg_comparison_2021}) compared feature selection methods for clustering high-dimensional RNA-sequencing data in the context of identifying cancer subtypes. Their findings illustrate that different feature selection strategies can lead to different biological and analytical results, reinforcing the importance of method selection in high-dimensional genomic analysis.
+
+García-Díaz et al. (\cite{garcia-diaz_unsupervised_2020}) similarly demonstrated the potential of feature selection in RNA-seq cancer classification, reporting classification accuracies exceeding 98% for the datasets and approach considered in their study. Such results indicate that effective feature selection can substantially reduce the dimensionality of genomic data while retaining strong predictive information.
+
+\section{Feature Selection and Classification Performance}
+
+An important issue emerging from the literature is whether reducing the number of features actually improves classification performance. Feature selection can provide several potential benefits: reducing computational cost, removing noise and irrelevant variables, mitigating redundancy, and improving model interpretability (\cite{li2017feature,venkatesh2019review}).
+
+However, feature selection does not guarantee an improvement in classification accuracy. The usefulness of a selected feature subset depends on factors including the dataset, the selection criterion, the classifier, and the number of retained features. A subset that performs well with one classifier may not necessarily produce the same performance with another classifier.
+
+This is particularly relevant for high-dimensional gene expression data because the relationship between feature selection and classification performance may differ between datasets. Differences in sample size, class distribution, and biological characteristics can affect both the selected features and the resulting classification model.
+
+Consequently, comparative evaluation is necessary to determine how different feature selection strategies affect classification performance under a common experimental framework. This provides the motivation for comparing filter, wrapper, and embedded methods using the same datasets and classification procedure in the present study.
+
+\section{Current Perspectives and Emerging Directions}
+
+Feature selection research has expanded beyond the selection of individual independent variables. Modern biomedical datasets increasingly contain information about relationships between genes, such as biological pathways and regulatory networks. Li et al. (\cite{li2017feature}) discuss feature selection from a broader data perspective, including challenges arising from structured and complex data.
+
+One direction involves incorporating relationships among genes into the selection process. For example, Group LASSO can be used when features naturally form groups, allowing selection to account for known structural relationships (\cite{tang2013feature}.)
+
+Another development is the integration of multiple biological data types. Modern biomedical studies may combine gene expression measurements with other molecular or clinical information. Such multi-view datasets introduce additional challenges because feature selection must account for heterogeneous sources of information.
+
+These developments demonstrate that feature selection remains an active research area. Nevertheless, the fundamental problem addressed by traditional filter, wrapper, and embedded approaches remains relevant: identifying informative variables while controlling the computational and statistical difficulties associated with high-dimensional data.
+
+\section{Research Gap}
+
+The reviewed literature establishes that feature selection is an important strategy for dealing with high-dimensional data and that filter, wrapper, and embedded methods provide different advantages and limitations. Filter methods are generally computationally efficient and suitable for large feature spaces, while wrapper methods can tailor feature selection to a particular classifier at greater computational cost. Embedded methods integrate selection into model training and provide an intermediate approach.
+
+However, the literature does not establish a universally superior feature selection method for high-dimensional gene expression classification. Differences in datasets, class distributions, classifiers, and evaluation procedures can lead to different conclusions regarding which method performs best.
+
+Furthermore, many studies focus on a particular feature selection approach or dataset, making direct comparison between different categories of methods difficult. The effect of feature selection may also depend on the dimensionality and characteristics of the dataset being analysed.
+
+This creates a need for a controlled comparative investigation in which different feature selection strategies are applied to high-dimensional gene expression datasets and evaluated using a common classification framework. In particular, comparing filter, wrapper, and embedded approaches across datasets with different characteristics can provide insight into whether the benefits of feature selection are consistent across classification problems.
+
+The present study therefore investigates the effect of feature selection on classification performance in high-dimensional human gene expression data. Filter methods, wrapper methods, and an embedded method are compared using a common Support Vector Machine classification framework. The study considers both the resulting feature subsets and their effect on classification performance, thereby addressing the relationship between feature reduction and predictive performance.
+
+\section{Chapter Summary}
+
+This chapter reviewed the literature surrounding feature selection and classification in high-dimensional gene expression data. Gene expression datasets commonly exhibit a high-dimensional, low-sample-size structure, creating challenges associated with computational complexity, irrelevant variables, redundancy, and overfitting.
+
+Three major categories of feature selection methods were examined. Filter methods use statistical or data-dependent criteria and are generally computationally efficient. Wrapper methods evaluate feature subsets using a learning algorithm and can therefore be more closely aligned with classification performance, although they are computationally more expensive. Embedded methods incorporate feature selection into the model-training process.
+
+Previous studies have demonstrated the usefulness of feature selection for cancer classification and high-dimensional genomic analysis, but the literature does not indicate that one feature selection approach consistently outperforms all others. This motivates the comparative evaluation undertaken in this study, where different feature selection strategies are assessed according to their effect on classification performance in high-dimensional gene expression datasets.
