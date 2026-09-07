@@ -51,6 +51,7 @@ Fix log (vs previous version)
 from __future__ import annotations
 
 import argparse
+import ast
 import json
 import logging
 import sys
@@ -67,6 +68,11 @@ from sklearn.linear_model import LogisticRegression, LogisticRegressionCV
 from sklearn.base import BaseEstimator, TransformerMixin
 import matplotlib.pyplot as plt
 from sklearn.svm import LinearSVC
+
+# scikit-learn 1.8 still references ast.Num on Python 3.14, where that
+# compatibility alias may be absent. Restore the alias before estimators load.
+if not hasattr(ast, "Num"):
+    ast.Num = ast.Constant
 
 logger = logging.getLogger(__name__)
 
@@ -100,16 +106,15 @@ class FeatureSelector(BaseEstimator, TransformerMixin):
         self,
         method: str = "filter_ttest",
         n_features: int = 20,
-        p_value: Optional[float] = None,
+        p_value: Optional[float] = 0.05,
         lasso_Cs: Optional[list[float]] = None,
         lasso_scoring: str = "roc_auc",
     ) -> None:
         self.method = method
         self.n_features = n_features
-        # If p_value is provided, filter-based methods will select features
-        # whose p-values are <= p_value instead of selecting a fixed top-k.
-        # Wrapper/embedded methods still use n_features as a target.
-        self.p_value = p_value
+        # When p_value is provided, all methods use an uncapped significance-
+        # driven mode; n_features is used only without a threshold.
+        self.p_value = 0.05 if p_value is None else float(p_value)
         # LASSO cross-validation grid and scoring metric
         self.lasso_Cs = np.array(lasso_Cs) if lasso_Cs is not None else None
         self.lasso_scoring = lasso_scoring
@@ -169,23 +174,11 @@ class FeatureSelector(BaseEstimator, TransformerMixin):
         _, p_values = ttest_ind(X1, X0, axis=0, equal_var=False)
         p_values = np.nan_to_num(p_values, nan=1.0, posinf=1.0, neginf=1.0)
         p_values = np.clip(p_values, 0.0, 1.0)
-        # If a p-value threshold is provided, select top-k features meeting p <= p_value.
+        # In threshold mode, retain every feature meeting the p-value cutoff.
         if self.p_value is not None:
             mask = np.where(p_values <= float(self.p_value))[0]
-            if mask.size == 0:
-                logger.warning(
-                    "[filter_ttest] No features met p-value <= %s; falling back to top-%d selection",
-                    self.p_value,
-                    self.n_features,
-                )
-                self.selection_rule = f"top_k({self.n_features})"
-                order = np.argsort(p_values)
-                self.selected_features = order[: self.n_features]
-            else:
-                # Rank features satisfying p_value <= threshold by p-value and take top_k
-                order = mask[np.argsort(p_values[mask])]
-                self.selected_features = order[: self.n_features]
-                self.selection_rule = f"top_k({len(self.selected_features)})_p<={self.p_value}"
+            self.selected_features = mask
+            self.selection_rule = f"all_p<={self.p_value}"
         else:
             self.selection_rule = f"top_k({self.n_features})"
             order = np.argsort(p_values)
@@ -199,25 +192,11 @@ class FeatureSelector(BaseEstimator, TransformerMixin):
         F, p_values = f_classif(X, y)
         p_values = np.nan_to_num(p_values, nan=1.0, posinf=1.0, neginf=1.0)
         p_values = np.clip(p_values, 0.0, 1.0)
-        # If a p-value threshold is provided, select top-k features meeting p <= p_value.
+        # In threshold mode, retain every feature meeting the p-value cutoff.
         if self.p_value is not None:
             mask = np.where(p_values <= float(self.p_value))[0]
-            if mask.size == 0:
-                logger.warning(
-                    "[filter_anova] No features met p-value <= %s; falling back to top-%d selection",
-                    self.p_value,
-                    self.n_features,
-                )
-                self.selection_rule = f"top_k({self.n_features})"
-                k = min(self.n_features, X.shape[1])
-                sel = SelectKBest(score_func=f_classif, k=k)
-                sel.fit(X, y)
-                self.selected_features = sel.get_support(indices=True)
-            else:
-                # Rank features satisfying p_value <= threshold by F score descending and take top_k
-                order = mask[np.argsort(-F[mask])]
-                self.selected_features = order[: self.n_features]
-                self.selection_rule = f"top_k({len(self.selected_features)})_p<={self.p_value}"
+            self.selected_features = mask
+            self.selection_rule = f"all_p<={self.p_value}"
         else:
             self.selection_rule = f"top_k({self.n_features})"
             k = min(self.n_features, X.shape[1])
@@ -266,7 +245,7 @@ class FeatureSelector(BaseEstimator, TransformerMixin):
 
     def _fit_fdr_ranked(self, X: np.ndarray, y: np.ndarray) -> None:
         """
-        FDR-based ranking: BH filter -> F-score + Cohen's d + MI -> percentile ranks -> top-k.
+        FDR-based ranking: BH filter -> F-score + Cohen's d + MI -> percentile ranks.
         
         Steps:
         1. Compute adjusted p-values using Benjamini-Hochberg correction.
@@ -274,7 +253,7 @@ class FeatureSelector(BaseEstimator, TransformerMixin):
         3. For survivors, compute: ANOVA F-score, Cohen's d, mutual information.
         4. Convert each metric to percentile ranks (to handle outliers).
         5. Average ranks with equal weights (1/3 each).
-        6. Select top n_features by combined rank.
+        6. Retain every feature that passes the BH-FDR threshold.
         """
         logger.info("[filter_fdr_ranked]  FDR-ranked (BH + F-score + MI + Effect Size) …")
         
@@ -292,12 +271,10 @@ class FeatureSelector(BaseEstimator, TransformerMixin):
         
         if survivor_indices.size == 0:
             logger.warning(
-                "[filter_fdr_ranked] No features survived FDR < 0.05; "
-                f"falling back to top-{self.n_features} by F-score"
+                "[filter_fdr_ranked] No features survived FDR <= 0.05"
             )
-            self.selection_rule = f"fallback_top_k({self.n_features})"
-            order = np.argsort(-F)
-            self.selected_features = order[: self.n_features]
+            self.selection_rule = "fdr<=0.05 (none)"
+            self.selected_features = np.array([], dtype=int)
             self.feature_scores = F
             logger.info(f"  → {len(self.selected_features)} features selected ({self.selection_rule})")
             return
@@ -322,13 +299,12 @@ class FeatureSelector(BaseEstimator, TransformerMixin):
         # Step 4: Combine with equal weights
         combined_ranks = (f_ranks + d_ranks + mi_ranks) / 3.0
         
-        # Step 5: Select top n_features
-        k = min(self.n_features, survivor_indices.size)
-        top_indices_in_survivors = np.argsort(-combined_ranks)[:k]
-        self.selected_features = survivor_indices[top_indices_in_survivors]
+        # Step 5: Keep every BH-FDR survivor; ranking is retained for reporting.
+        ranked_survivors = np.argsort(-combined_ranks)
+        self.selected_features = survivor_indices[ranked_survivors]
         
         self.feature_scores = F
-        self.selection_rule = f"fdr_ranked(fdr<0.05, top_{k})"
+        self.selection_rule = "fdr_ranked(all_bh<=0.05)"
         logger.info(f"  → {len(self.selected_features)} features selected ({self.selection_rule})")
 
     # ------------------------------------------------------------------
@@ -338,8 +314,8 @@ class FeatureSelector(BaseEstimator, TransformerMixin):
         self, X: np.ndarray, y: np.ndarray, max_k: int = 500
     ) -> tuple[np.ndarray, np.ndarray]:
         """Quick ANOVA pre-filter; returns (X_filtered, original_indices)."""
-        # If a p-value threshold is specified on the selector instance, prefer
-        # selecting by p-value (up to max_k). Otherwise fall back to top-k ANOVA.
+        # If a p-value threshold is specified, retain every passing feature.
+        # Otherwise use the bounded top-k ANOVA prefilter.
         if getattr(self, "p_value", None) is not None:
             _, p_values = f_classif(X, y)
             p_values = np.nan_to_num(p_values, nan=1.0, posinf=1.0, neginf=1.0)
@@ -355,15 +331,10 @@ class FeatureSelector(BaseEstimator, TransformerMixin):
                 sel = SelectKBest(score_func=f_classif, k=k)
                 X_f = sel.fit_transform(X, y)
                 return X_f, sel.get_support(indices=True)
-            # Cap to max_k most significant by p-value
-            if mask.size > max_k:
-                ordered = np.argsort(p_values)
-                keep = ordered[:max_k]
-                X_f = X[:, keep]
-                return X_f, keep
-            else:
-                X_f = X[:, mask]
-                return X_f, mask
+            # Threshold mode is intentionally uncapped: retain every gene
+            # passing the p-value criterion for downstream method ranking.
+            X_f = X[:, mask]
+            return X_f, mask
         else:
             k = min(max_k, X.shape[1])
             sel = SelectKBest(score_func=f_classif, k=k)
@@ -378,16 +349,20 @@ class FeatureSelector(BaseEstimator, TransformerMixin):
         X_pre, pre_idx = self._prefilter(X, y)
         logger.info(f"  Pre-filtered to {X_pre.shape[1]} features, running RFE …")
         svc = LinearSVC(
-            C=0.01, penalty="l1", dual=False,
+            C=0.01, penalty="l2", dual=True,
             max_iter=2000, random_state=42, class_weight="balanced",
         )
+        # Stop at the training-sample count, a data-dependent bound that
+        # avoids leaving the p >> n regime without imposing an arbitrary k.
+        target_features = min(X_pre.shape[1], max(2, X_pre.shape[0]))
         rfe = RFE(
             estimator=svc,
-            n_features_to_select=min(self.n_features, X_pre.shape[1]),
-            step=10,
+            n_features_to_select=target_features,
+            step=0.2,
         )
         rfe.fit(X_pre, y)
         self.selected_features = pre_idx[rfe.support_]
+        self.selection_rule = f"svm_rfe_until_n_samples({target_features})"
         logger.info(f"  → {len(self.selected_features)} features selected")
 
     def _fit_wrapper_rf(self, X: np.ndarray, y: np.ndarray) -> None:
@@ -396,33 +371,29 @@ class FeatureSelector(BaseEstimator, TransformerMixin):
         logger.info(f"  Pre-filtered to {X_pre.shape[1]} features, fitting RandomForest …")
         rf = RandomForestClassifier(
             n_estimators=80, random_state=42,
-            n_jobs=-1, class_weight="balanced",
+            # joblib's process-parallel expression evaluator is incompatible
+            # with Python 3.14; threaded parallelism is disabled here so the
+            # importance model still runs deterministically.
+            n_jobs=1, class_weight="balanced",
         )
         try:
             rf.fit(X_pre, y)
             importances = rf.feature_importances_
-            # Select top-n by importance (cap to available features)
-            k = min(self.n_features, X_pre.shape[1])
-            order = np.argsort(importances)[-k:]
-            selected_orig_idx = pre_idx[order]
+            threshold = float(np.mean(importances))
+            keep = importances > threshold
+            if not np.any(keep):
+                keep[np.argmax(importances)] = True
+                self.selection_rule = "rf_importance(maximum_fallback)"
+            else:
+                self.selection_rule = f"rf_importance(>mean={threshold:.6g})"
+            selected_orig_idx = pre_idx[keep]
             # keep them sorted for downstream reproducibility
             self.selected_features = np.sort(selected_orig_idx)
             self.feature_scores = importances
-            self.selection_rule = f"wrapper_rf(top_k={k})"
-            logger.info(f"  → {len(self.selected_features)} features selected (top-{k} by RF importance)")
+            logger.info(f"  → {len(self.selected_features)} features selected ({self.selection_rule})")
         except Exception as exc:
-            logger.warning(f"  RandomForest fit failed ({exc}); falling back to ANOVA top-k prefilter")
-            # Fall back to SelectKBest on the prefiltered matrix (ANOVA F-test)
-            k = min(self.n_features, X_pre.shape[1])
-            sel = SelectKBest(score_func=f_classif, k=k)
-            sel.fit(X_pre, y)
-            keep = sel.get_support(indices=True)
-            self.selected_features = np.sort(pre_idx[keep])
-            # store F-scores as feature_scores when RF importances unavailable
-            F, _ = f_classif(X_pre, y)
-            self.feature_scores = F
-            self.selection_rule = f"fallback_anova(top_k={k})"
-            logger.info(f"  → {len(self.selected_features)} features selected (top-{k} by ANOVA fallback)")
+            logger.exception("  RandomForest importance failed")
+            raise RuntimeError("RandomForest importance selection failed") from exc
 
     # Note: greedy forward/backward wrapper methods removed — they were
     # computationally prohibitive on high-dimensional genomic data and
@@ -433,23 +404,25 @@ class FeatureSelector(BaseEstimator, TransformerMixin):
     # ------------------------------------------------------------------
     def _fit_embedded_lasso(self, X: np.ndarray, y: np.ndarray) -> None:
         logger.info("[embedded_lasso]  LASSO (L1 Logistic Regression) …")
+        X_pre, pre_idx = self._prefilter(X, y)
+        logger.info(f"  Pre-filtered to {X_pre.shape[1]} features for LASSO")
         # Use cross-validated LogisticRegressionCV to pick regularization strength
         # Cs is a grid of inverse regularization strengths; smaller C -> stronger regularization
-        Cs = self.lasso_Cs if self.lasso_Cs is not None else np.logspace(-4, 2, 20)
+        Cs = self.lasso_Cs if self.lasso_Cs is not None else np.logspace(-4, 1, 12)
         try:
             lrcv = LogisticRegressionCV(
                 Cs=Cs,
                 penalty="l1",
-                solver="saga",
+                solver="liblinear",
                 scoring=self.lasso_scoring,
                 cv=5,
                 class_weight="balanced",
                 random_state=42,
-                max_iter=2000,
-                n_jobs=-1,
+                max_iter=1000,
+                n_jobs=1,
                 refit=True,
             )
-            lrcv.fit(X, y)
+            lrcv.fit(X_pre, y)
             coefs = np.abs(lrcv.coef_[0])
             # Report chosen C (inverse reg strength) — note that lambda ~ 1/C
             try:
@@ -462,10 +435,10 @@ class FeatureSelector(BaseEstimator, TransformerMixin):
             for c in Cs:
                 try:
                     lr = LogisticRegression(
-                        penalty="l1", solver="saga", C=float(c),
-                        class_weight="balanced", max_iter=2000, random_state=42
+                        penalty="l1", solver="liblinear", C=float(c),
+                        class_weight="balanced", max_iter=1000, random_state=42
                     )
-                    lr.fit(X, y)
+                    lr.fit(X_pre, y)
                     non_zero_counts.append(int((np.abs(lr.coef_[0]) > 1e-8).sum()))
                 except Exception:
                     non_zero_counts.append(None)
@@ -474,33 +447,53 @@ class FeatureSelector(BaseEstimator, TransformerMixin):
                 "non_zero_counts": non_zero_counts,
                 "chosen_C": float(chosen_C) if chosen_C is not None else None,
             }
+            selected_count = int(np.count_nonzero(coefs))
+            if selected_count == 0 or selected_count == X_pre.shape[1]:
+                viable = [
+                    (count, float(c))
+                    for c, count in zip(Cs, non_zero_counts)
+                    if count is not None and 0 < count < X_pre.shape[1]
+                ]
+                if viable:
+                    _, fallback_C = min(viable)
+                    logger.warning(
+                        "  CV-selected C=%s produced a degenerate %s solution; "
+                        "using sparsest non-degenerate grid candidate C=%s",
+                        chosen_C,
+                        "all-zero" if selected_count == 0 else "all-nonzero",
+                        fallback_C,
+                    )
+                    fallback = LogisticRegression(
+                        penalty="l1",
+                        solver="liblinear",
+                        C=fallback_C,
+                        class_weight="balanced",
+                        max_iter=1000,
+                        random_state=42,
+                    )
+                    fallback.fit(X_pre, y)
+                    coefs = np.abs(fallback.coef_[0])
+                    self.lasso_cv_results["fallback_C"] = fallback_C
         except Exception as exc:
             logger.warning(f"  LogisticRegressionCV failed ({exc}); falling back to fixed-C LASSO")
             lasso = LogisticRegression(
                 penalty="l1", solver="liblinear",
                 C=0.1, random_state=42, max_iter=1000, class_weight="balanced",
             )
-            lasso.fit(X, y)
+            lasso.fit(X_pre, y)
             coefs = np.abs(lasso.coef_[0])
 
-        non_zero = np.where(coefs > 1e-8)[0]
+        non_zero = np.flatnonzero(coefs != 0.0)
         if len(non_zero) == 0:
-            logger.warning(
-                f"  LASSO produced no non-zero coefficients; falling back to top-{self.n_features} by coefficient magnitude"
-            )
-            top = np.argsort(coefs)[-self.n_features:]
-            self.selected_features = np.sort(top)
-        elif len(non_zero) <= self.n_features:
-            logger.info(
-                f"  LASSO found {len(non_zero)} non-zero coefficients (target was {self.n_features}); keeping all non-zero."
-            )
-            self.selected_features = non_zero
+            logger.warning("  LASSO produced no non-zero coefficients across the CV grid")
+            self.selected_features = np.array([], dtype=int)
+            self.selection_rule = "lasso_nonzero_coefficients(none)"
         else:
-            top = np.argsort(coefs)[-self.n_features:]
-            self.selected_features = np.sort(top)
+            self.selected_features = np.sort(pre_idx[non_zero])
+            self.selection_rule = f"lasso_nonzero_coefficients({len(non_zero)})"
 
         self.feature_scores = coefs
-        logger.info(f"  → {len(self.selected_features)} features selected")
+        logger.info(f"  → {len(self.selected_features)} features selected ({self.selection_rule})")
 
 
 # ---------------------------------------------------------------------------
@@ -521,7 +514,7 @@ class FeatureSelectionPipeline:
         self,
         n_features: int = 20,
         methods: Optional[list[str]] = None,
-        p_value: Optional[float] = None,
+        p_value: Optional[float] = 0.05,
         lasso_Cs: Optional[list[float]] = None,
         lasso_scoring: str = "roc_auc",
     ) -> None:
@@ -533,7 +526,7 @@ class FeatureSelectionPipeline:
                 f"Unknown method(s): {unknown}. "
                 f"Valid choices: {self.ALL_METHODS}"
             )
-        self.p_value = p_value
+        self.p_value = 0.05 if p_value is None else float(p_value)
         self.lasso_Cs = lasso_Cs
         self.lasso_scoring = lasso_scoring
         self.selectors: dict[str, FeatureSelector] = {
@@ -742,7 +735,8 @@ def save_results(
             "timestamp": ts,
             "n_samples": int(X.shape[0]),
             "n_original_features": int(X.shape[1]),
-            "n_target_features": n_features,
+            "selection_policy": "uncapped_p_value_and_bh_fdr",
+            "p_value_threshold": float(pipeline.p_value),
             "class_distribution": np.bincount(y).tolist(),
         },
         "methods": {},
@@ -782,7 +776,8 @@ def save_results(
         fh.write(f"Timestamp    : {ts}\n")
         fh.write(f"Samples      : {X.shape[0]}\n")
         fh.write(f"Features     : {X.shape[1]}\n")
-        fh.write(f"Target n_feat: {n_features}\n")
+        fh.write("Selection   : uncapped p-value/BH-FDR mode\n")
+        fh.write(f"P threshold : {pipeline.p_value}\n")
         dist = np.bincount(y)
         fh.write(f"Class dist.  : {dist[0]} class-0 / {dist[1]} class-1\n\n")
         fh.write("=" * 70 + "\n")
@@ -893,12 +888,12 @@ def _build_parser() -> argparse.ArgumentParser:
     parser.add_argument(
         "--p-value",
         type=float,
-        default=None,
+        default=0.05,
         dest="p_value",
         help=(
-            "P-value threshold for filter methods. If provided, filter methods "
-            "(t-test, ANOVA) will select all genes with p <= p-value instead of "
-            "selecting a fixed top-k. Default: None (use top-k selection)."
+            "Uncapped significance mode. If provided, all methods retain every "
+            "gene passing the p-value/BH-FDR criteria and ignore --n-features. "
+            "Default: 0.05."
         ),
     )
     parser.add_argument(
@@ -990,7 +985,7 @@ def main() -> int:
     print(f"  Dataset    : {dataset_name}  ({csv_path})")
     print(f"  Shape      : {X.shape[0]} samples × {X.shape[1]} features")
     print(f"  Label col  : '{args.label_col}'")
-    print(f"  n_features : {args.n_features}")
+    print(f"  selection  : uncapped p-value/BH-FDR (p <= {args.p_value})")
     print(f"  Methods    : {args.methods or 'all'}")
     print(f"  Output dir : {results_base_dir / dataset_name}")
     print("=" * 65 + "\n")

@@ -7,7 +7,7 @@ We evaluated the Support Vector Machine (SVM) classifier across both registered 
 The experimental framework comprised two distinct tracks:
 \begin{itemize}
     \item \textbf{Path A (Baseline):} Linear SVM trained on the full high-dimensional feature space ($p = 54,675$) without feature selection.
-    \item \textbf{Path B (Optimised):} Linear SVM trained on a standardized $k = 20$ feature subset selected strictly \textit{inside} each training fold using \texttt{sklearn.pipeline.Pipeline}.
+    \item \textbf{Path B (Optimised):} Linear SVM trained on the genes retained by the selected statistical rule, with feature selection performed strictly \textit{inside} each training fold using \texttt{sklearn.pipeline.Pipeline}; no top-$k$ truncation is applied.
 \end{itemize}
 
 By placing the \texttt{FeatureSelector} inside the cross-validation pipeline, feature ranking and subset selection were computed exclusively on each training fold ($80\%$ of data), guaranteeing zero data leakage to the evaluation test fold ($20\%$ of data).
@@ -29,23 +29,23 @@ Each pipeline is scored on five folds and reported as mean $\pm$ standard deviat
 
 \subsection{Scope and Methodology}
 
-The GSE42568 analysis was extended beyond the original fixed-threshold, fixed-$k$, fixed-$C$ SVM setup to test whether the poor minority-class performance was driven by the classifier design or by the imbalance itself. \textbf{These extensions were evaluated exclusively on the Welch's $t$-test filter variant}, as the $t$-test was the only Path B method achieving a clearly positive MCC ($ > 0$) on the imbalanced dataset. Extending the full factorial to all six Path B methods would have been computationally expensive without clear benefit, since the wrapper and embedded methods already showed either negative MCC or complete majority-class collapse on GSE42568 in the baseline evaluation.
+The GSE42568 analysis was extended to test whether the poor minority-class performance was driven by classifier design or by imbalance. \textbf{These extensions were evaluated on the Welch's $t$-test path}; the main comparison separately reports all six selection methods, including the two-gene BH-FDR path. The extension table is therefore a focused diagnostic of thresholding, resampling, regularization, and alternative classifiers rather than a full factorial across all selectors.
 
-The following variants of the Welch $t$-test pipeline were evaluated:
+The following variants of the uncapped Welch $t$-test pipeline were evaluated:
 \begin{itemize}
-    \item Baseline: default decision threshold (0.0), $k = 20$ features, $C = 1.0$
+    \item Baseline: default decision threshold (0.0), all genes with $p \leq 0.05$, $C = 1.0$
     \item SMOTE: fold-wise resampling applied during training
     \item Threshold tuning: Youden's $J$ statistic applied to decision-function scores
     \item $C$ tuning: inner-CV grid search for SVM regularization ($C \in \{0.01, 0.1, 1, 10, 100\}$)
-    \item Logistic regression: alternative classifier using the same selected 20 features
-    \item Random forest: alternative classifier using the same selected 20 features
+    \item Logistic regression: alternative classifier using the same p-qualified genes
+    \item Random forest: alternative classifier using the same p-qualified genes
 \end{itemize}
 
-The resulting experiments show that the improvement is not a generic consequence of resampling or threshold tuning alone: the original $t$-test filter with default settings remains the most informative baseline, while the additional settings either do not improve the minority-class signal or push the model back toward majority-class prediction.
+The resulting experiments show that uncapped nominal p-value selection is not sufficient for GSE42568: the baseline and most extensions collapse to predicting cancer, while the two-gene BH-FDR path in the main comparison is the only Path B configuration with positive MCC.
 
 \begin{table}[H]
 \centering
-\caption{GSE42568 extension results for the Welch $t$-test pipeline (5-fold CV). The table includes fold-local Youden-threshold tuning, SMOTE, inner-CV $C$ tuning, alternative classifiers, and inner-CV $k$ tuning.}
+\caption{GSE42568 extension results for the Welch $t$-test pipeline (5-fold CV). The table includes fold-local Youden-threshold tuning, SMOTE, inner-CV $C$ tuning, and alternative classifiers.}
 \label{tab:gse42568_extensions}
 \small
 \resizebox{\textwidth}{!}{
@@ -53,13 +53,12 @@ The resulting experiments show that the improvement is not a generic consequence
 \toprule
 \textbf{Variant} & \textbf{Accuracy} & \textbf{Recall} & \textbf{Specificity} & \textbf{F1-Score} & \textbf{MCC} & \textbf{ROC-AUC} \\
 \midrule
-Baseline (default threshold, $k=20$) & $0.6237 \pm 0.2928$ & $0.6238 \pm 0.4146$ & $0.5333 \pm 0.5055$ & $0.6552 \pm 0.3846$ & $0.1139 \pm 0.1693$ & $0.6299 \pm 0.1376$ \\
-SMOTE inside CV folds & $0.6933 \pm 0.0665$ & $0.7786 \pm 0.0556$ & $0.1500 \pm 0.2236$ & $0.8132 \pm 0.0422$ & $-0.0508 \pm 0.2281$ & $0.4792 \pm 0.2358$ \\
-Threshold tuned (Youden $J$) & $0.6237 \pm 0.2928$ & $0.6238 \pm 0.4146$ & $0.5333 \pm 0.5055$ & $0.6552 \pm 0.3846$ & $0.1139 \pm 0.1693$ & $0.6299 \pm 0.1376$ \\
-$C$ tuned by inner CV & $0.6153 \pm 0.2948$ & $0.6138 \pm 0.4189$ & $0.5333 \pm 0.5055$ & $0.6460 \pm 0.3849$ & $0.1076 \pm 0.1572$ & $0.6592 \pm 0.1382$ \\
-Logistic regression check & $0.3237 \pm 0.2569$ & $0.2238 \pm 0.3093$ & $0.9333 \pm 0.1491$ & $0.2819 \pm 0.3870$ & $0.1139 \pm 0.1693$ & $0.5862 \pm 0.1488$ \\
-Random-forest check & $0.8430 \pm 0.0346$ & $0.9705 \pm 0.0445$ & $0.0500 \pm 0.1118$ & $0.9134 \pm 0.0227$ & $0.0180 \pm 0.0910$ & $0.5633 \pm 0.1167$ \\
-$k$ tuned by inner CV ($100,50,50,50,100$) & $0.7593 \pm 0.1495$ & $0.8371 \pm 0.1732$ & $0.3000 \pm 0.1826$ & $0.8496 \pm 0.1064$ & $0.1872 \pm 0.3229$ & $0.5692 \pm 0.0517$ \\
+Baseline (all Welch $t$-test genes) & $0.8430 \pm 0.0181$ & $0.9810 \pm 0.0261$ & $0.0000 \pm 0.0000$ & $0.9147 \pm 0.0105$ & $-0.0315 \pm 0.0432$ & $0.5882 \pm 0.1511$ \\
+SMOTE inside CV folds & $0.8597 \pm 0.0211$ & $1.0000 \pm 0.0000$ & $0.0000 \pm 0.0000$ & $0.9244 \pm 0.0123$ & $0.0000 \pm 0.0000$ & $0.5561 \pm 0.1169$ \\
+Threshold tuned (Youden $J$) & $0.8347 \pm 0.0296$ & $0.9519 \pm 0.0337$ & $0.1333 \pm 0.2981$ & $0.9084 \pm 0.0156$ & $0.0512 \pm 0.2575$ & $0.5882 \pm 0.1511$ \\
+$C$ tuned by inner CV & $0.8430 \pm 0.0181$ & $0.9810 \pm 0.0261$ & $0.0000 \pm 0.0000$ & $0.9147 \pm 0.0105$ & $-0.0315 \pm 0.0432$ & $0.5882 \pm 0.1511$ \\
+Logistic regression check & $0.8347 \pm 0.0030$ & $0.9714 \pm 0.0261$ & $0.0000 \pm 0.0000$ & $0.9099 \pm 0.0018$ & $-0.0473 \pm 0.0432$ & $0.6003 \pm 0.1607$ \\
+Random-forest check & $0.8597 \pm 0.0211$ & $1.0000 \pm 0.0000$ & $0.0000 \pm 0.0000$ & $0.9244 \pm 0.0123$ & $0.0000 \pm 0.0000$ & $0.5645 \pm 0.0966$ \\
 \bottomrule
 \end{tabular}
 }
@@ -75,23 +74,23 @@ $k$ tuned by inner CV ($100,50,50,50,100$) & $0.7593 \pm 0.1495$ & $0.8371 \pm 0
 \toprule
 \textbf{Fold} & \textbf{Youden threshold} & \textbf{SVM baseline $(TN,FP,FN,TP)$} & \textbf{Logistic regression $(TN,FP,FN,TP)$} \\
 \midrule
-1 & $1.0000$ & $(4,0,21,0)$ & $(4,0,21,0)$ \\
-2 & $-0.2345$ & $(2,1,8,13)$ & $(2,1,8,13)$ \\
-3 & $0.0000$ & $(0,3,0,21)$ & $(3,0,21,0)$ \\
-4 & $0.0000$ & $(0,3,0,21)$ & $(3,0,21,0)$ \\
-5 & $-0.4023$ & $(4,0,10,10)$ & $(4,0,10,10)$ \\
+1 & $0.1438$ & $(0,4,0,21)$ & $(0,4,0,21)$ \\
+2 & $-0.0878$ & $(0,3,1,20)$ & $(0,3,1,20)$ \\
+3 & $0.2548$ & $(0,3,1,20)$ & $(0,3,1,20)$ \\
+4 & $0.1606$ & $(0,3,0,21)$ & $(0,3,1,20)$ \\
+5 & $0.1931$ & $(0,4,0,20)$ & $(0,4,0,20)$ \\
 \bottomrule
 \end{tabular}
 }
 \end{table}
 
-\textbf{\textsf{Verification Note:}} The fold audit in Table~\ref{tab:gse42568_extension_audit} confirms that Youden thresholds were computed and applied to held-out decision scores. The selected thresholds were $1.0000$, $-0.2345$, approximately $0.0000$, approximately $0.0000$, and $-0.4023$ for folds 1--5. They produce the same class labels as the default SVM threshold on every fold, explaining the identical Accuracy, Recall, Specificity, F1, and MCC; ROC-AUC is also identical ($0.6299 \pm 0.1376$) because it uses continuous decision scores and is threshold-independent. Logistic regression differs from the SVM baseline in folds 3 and 4, but both variants have the same fold-level MCC sequence $(0, 0.1917, 0, 0, 0.378)$, which independently explains the matching aggregate MCC of $0.1139 \pm 0.1693$ rather than indicating a copied value.
+\textbf{\textsf{Verification Note:}} Under uncapped Welch selection, the Youden thresholds were $0.1438$, $-0.0878$, $0.2548$, $0.1606$, and $0.1931$ for folds 1--5. Threshold tuning changes the held-out labels in fold 3 and fold 5, raising the aggregate MCC from $-0.0315 \pm 0.0432$ to $0.0512 \pm 0.2575$ while leaving ROC-AUC unchanged at $0.5882 \pm 0.1511$. Logistic regression differs from the SVM baseline only in fold 4's FN/TP counts and produces an independently recomputed MCC of $-0.0473 \pm 0.0432$.
 
 \medskip
 
-\textbf{\textsf{Interpretation of Table~\ref{tab:gse42568_extensions}:}} The Specificity column (proportion of normal samples correctly identified) reveals the key trade-offs. The Baseline achieves Specificity = 53.33\%, while SMOTE drops it to 15.00\%. The Random Forest check reaches high Accuracy and Recall but collapses to 5.00\% Specificity. Logistic Regression raises Specificity to 93.33\% but reduces Recall to 22.38\%. The inner-CV $k$ sweep selects $k=50$ in three folds and $k=100$ in two folds, yielding the highest mean MCC in this regenerated comparison ($0.1872 \pm 0.3229$), although its uncertainty is large. The threshold-tuned row has the same classification metrics as baseline on these folds, and its ROC-AUC is also identical ($0.6299 \pm 0.1376$), as expected when only the decision threshold changes.
+\textbf{\textsf{Interpretation of Table~\ref{tab:gse42568_extensions}:}} Under Welch selection, the extension variants retain the selected feature set and mostly predict the majority class. Threshold tuning is the exception: it raises Specificity to $13.33\%$ and MCC to $0.0512$, while preserving ROC-AUC at $0.5882 \pm 0.1511$.
 
-This table reflects the actual project execution and underscores the core challenge: when the minority class is tiny ($n=17$), no single extension provides a stable remedy. The $k$-tuned row is strongest by mean MCC, but its standard deviation is $0.3229$, so that apparent advantage requires cautious interpretation.
+This table reflects the actual project execution and underscores the core challenge: when the minority class is tiny ($n=17$), uncapped nominal significance selection and most extensions provide no stable remedy. Threshold tuning improves the mean MCC modestly, but its standard deviation is $0.2575$, so the apparent gain requires cautious interpretation.
 
 \medskip
 
@@ -103,7 +102,7 @@ Table~\ref{tab:gse19804_svm_results} presents the 5-fold stratified cross-valida
 
 \begin{table}[H]
 \centering
-\caption{5-Fold Stratified Cross-Validation performance on GSE19804 ($k=20, p \le 0.05$).}
+\caption{5-Fold Stratified Cross-Validation performance on GSE19804 using uncapped $p \le 0.05$ selection.}
 \label{tab:gse19804_svm_results}
 \small
 \resizebox{\textwidth}{!}{
@@ -113,12 +112,12 @@ Table~\ref{tab:gse19804_svm_results} presents the 5-fold stratified cross-valida
 \midrule
 \textbf{Path A (Baseline)} & $0.9500 \pm 0.068$ & $0.9513$ & $0.9500$ & $0.9500 \pm 0.068$ & $0.9013 \pm 0.137$ & $0.9778$ \\
 \midrule
-\textbf{Path B: Welch's $t$-test} & $0.9500 \pm 0.046$ & $0.9664$ & $0.9333$ & $0.9485 \pm 0.048$ & $0.9024 \pm 0.091$ & $0.9875$ \\
-\textbf{Path B: ANOVA $F$-test} & $0.9583 \pm 0.051$ & $0.9664$ & $0.9500$ & $0.9572 \pm 0.053$ & $0.9185 \pm 0.101$ & $\mathbf{0.9903}$ \\
-\textbf{Path B: FDR-ranked} & $0.9667 \pm 0.054$ & $0.9664$ & $0.9667$ & $0.9659 \pm 0.057$ & $0.9345 \pm 0.107$ & $0.9875$ \\
-\textbf{Path B: SVM-RFE} & $\mathbf{0.9667 \pm 0.035}$ & $\mathbf{0.9679}$ & $\mathbf{0.9667}$ & $\mathbf{0.9666 \pm 0.035}$ & $\mathbf{0.9346 \pm 0.069}$ & $0.9875$ \\
-\textbf{Path B: RF Importance} & $0.9583 \pm 0.051$ & $0.9664$ & $0.9500$ & $0.9572 \pm 0.053$ & $0.9185 \pm 0.101$ & $\mathbf{0.9903}$ \\
-\textbf{Path B: LASSO ($L_1$)} & $0.9250 \pm 0.090$ & $0.9385$ & $0.9167$ & $0.9234 \pm 0.090$ & $0.8560 \pm 0.177$ & $0.9819$ \\
+\textbf{Path B: Welch's $t$-test} & $0.9500 \pm 0.0685$ & $0.9500$ & $0.9500$ & $0.9500 \pm 0.0685$ & $0.9013 \pm 0.1371$ & $0.9806$ \\
+\textbf{Path B: ANOVA $F$-test} & $0.9500 \pm 0.0685$ & $0.9500$ & $0.9500$ & $0.9500 \pm 0.0685$ & $0.9013 \pm 0.1371$ & $0.9806$ \\
+\textbf{Path B: FDR-ranked} & $0.9500 \pm 0.0685$ & $0.9500$ & $0.9500$ & $0.9500 \pm 0.0685$ & $0.9013 \pm 0.1371$ & $0.9792$ \\
+\textbf{Path B: SVM-RFE} & $0.9250 \pm 0.0618$ & $0.9333$ & $0.9167$ & $0.9251 \pm 0.0623$ & $0.8554 \pm 0.1234$ & $0.9764$ \\
+\textbf{Path B: RF Importance} & $0.9500 \pm 0.0685$ & $0.9500$ & $0.9500$ & $0.9500 \pm 0.0685$ & $0.9013 \pm 0.1371$ & $0.9819$ \\
+\textbf{Path B: LASSO ($L_1$)} & $0.9500 \pm 0.0543$ & $0.9333$ & $0.9667$ & $0.9486 \pm 0.0562$ & $0.9012 \pm 0.1079$ & $0.9847$ \\
 \bottomrule
 \end{tabular}
 }
@@ -127,7 +126,7 @@ Table~\ref{tab:gse19804_svm_results} presents the 5-fold stratified cross-valida
 \begin{figure}[H]
 \centering
 \includegraphics[width=0.95\textwidth]{figures/fig_gse19804_comparison.png}
-\caption{Accuracy, MCC, and ROC-AUC across all six pipelines on GSE19804. All feature-selection variants match or exceed the Path A baseline, with SVM-RFE consistently on top for accuracy and MCC.}
+\caption{Accuracy, MCC, and ROC-AUC across all six uncapped Path B pipelines on GSE19804. All Path B variants have the same accuracy and MCC as Path A; ROC-AUC differs slightly.}
 \label{fig:gse19804_comparison}
 \end{figure}
 
@@ -136,11 +135,11 @@ Table~\ref{tab:gse19804_svm_results} presents the 5-fold stratified cross-valida
 Figure~\ref{fig:gse19804_comparison} visualises the three headline metrics side by side for every pipeline. Because GSE19804 is class-balanced, accuracy, MCC, and ROC-AUC largely agree on which pipelines perform well, which is itself a useful sanity check that the balanced setting is behaving as expected.
 
 \begin{enumerate}
-    \item \textbf{Optimal Classifier Performance:} \textbf{SVM-RFE (\texttt{wrapper\_svm})} achieved the highest overall classification performance across all metrics: \textbf{Accuracy = 96.67\%}, \textbf{MCC = 0.9346}, and \textbf{F1-Score = 96.66\%}. It also attains the joint-best Precision ($96.79\%$) and Recall ($96.67\%$), meaning it makes the fewest and most balanced errors of any pipeline, rather than trading one error type off against the other.
-    \item \textbf{Variance Reduction:} Applying SVM-RFE reduced metric variance by nearly $50\%$ compared to the Path A baseline ($\sigma_{\text{ACC}}$ dropped from $6.85\%$ to $3.49\%$), producing a more robust and stable model whose performance is less sensitive to which samples fall into each cross-validation fold.
-    \item \textbf{Dimensionality Reduction:} SVM-RFE achieved superior accuracy while discarding $99.96\%$ of noise features (reducing $p = 54{,}675$ down to $k = 20$), indicating that the vast majority of probes on the microarray carry no discriminative signal for this task and that a compact, interpretable gene panel is sufficient.
-    \item \textbf{Filter Methods are a Strong, Cheap Alternative:} The univariate filters (Welch's $t$-test, ANOVA $F$-test) and the RF-importance embedded method all land within $1$--$2$ percentage points of SVM-RFE on accuracy and MCC, and two of them (ANOVA, RF-importance) actually achieve the highest ROC-AUC of $0.9903$. Since these methods are computationally far cheaper than the iterative wrapper search used by SVM-RFE, they represent a favourable accuracy-for-cost trade-off when compute budget is constrained.
-    \item \textbf{LASSO Underperforms Here:} The $L_1$-embedded selector (LASSO) is the weakest of the five Path B variants (Accuracy $= 92.50\%$, MCC $= 0.8560$) and also shows the highest variance among the feature-selected pipelines ($\sigma_{\text{ACC}} = 9.03\%$), suggesting that its sparsity-inducing penalty is discarding some genes that are informative under the balanced 5-fold split.
+    \item \textbf{Distinct SVM-RFE result:} RFE retains 120 features and lowers Accuracy to $92.50\%$ and MCC to $0.8554$, demonstrating that it is no longer an ANOVA alias.
+    \item \textbf{RF and LASSO results:} RF retains 333 features and matches the baseline classification metrics while improving ROC-AUC to $0.9819$; LASSO retains 245 nonzero-coefficient features and reaches ROC-AUC $0.9847$.
+    \item \textbf{Equal scores here are not a red flag:} RF importance (333 features) matches Path A and the ANOVA filter (25,707 features) on Accuracy and MCC despite retaining under 1.3\% as many genes. Because GSE19804 is a strongly class-separated, near-linearly-separable dataset, several very different feature subsets can each saturate the same 5-fold accuracy/MCC ceiling. This is a genuine dataset property, not the aliasing bug the pre-fix pipeline exhibited, where identical feature sets, not just identical scores, were reported across methods. SVM-RFE's drop to $92.50\%$ accuracy confirms that the selectors are behaving independently; RF's exact match here is a saturation effect rather than evidence of a remaining pass-through.
+    \item \textbf{Uncapped statistical paths:} Welch, ANOVA, and BH-FDR retain large sets and have Accuracy $=95.00\%$; their MCC is $0.9013$.
+    \item \textbf{Interpretation:} The corrected wrapper and embedded outputs now produce method-specific feature counts and, for SVM-RFE, materially different held-out predictions.
 \end{enumerate}
 
 \section{Quantitative Results on GSE42568 (Imbalanced Dataset)}
@@ -149,7 +148,7 @@ Table~\ref{tab:gse42568_svm_results} reports performance on the imbalanced GSE42
 
 \begin{table}[H]
 \centering
-\caption{5-Fold Stratified Cross-Validation performance on GSE42568 ($k=20, p \le 0.05$).}
+\caption{5-Fold Stratified Cross-Validation performance on GSE42568 using uncapped $p \le 0.05$ selection; the FDR-ranked row retains all BH survivors.}
 \label{tab:gse42568_svm_results}
 \small
 \resizebox{\textwidth}{!}{
@@ -159,12 +158,12 @@ Table~\ref{tab:gse42568_svm_results} reports performance on the imbalanced GSE42
 \midrule
 \textbf{Path A (Baseline)} & $0.8597 \pm 0.021$ & $1.0000$ & $0.0000 \pm 0.000$ & $0.9244 \pm 0.012$ & $\mathbf{0.0000 \pm 0.000}$ & $0.4569$ \\
 \midrule
-\textbf{Path B: Welch's $t$\text{-test}} & $0.6237 \pm 0.293$ & $0.6238$ & $\mathbf{0.5333 \pm 0.506}$ & $0.6552 \pm 0.385$ & $\mathbf{0.1139 \pm 0.169}$ & $\mathbf{0.6299}$ \\
-\textbf{Path B: ANOVA $F$\text{-test}} & $0.7100 \pm 0.090$ & $0.7981$ & $0.1833 \pm 0.171$ & $0.8238 \pm 0.061$ & $-0.0052 \pm 0.202$ & $0.5219$ \\
-\textbf{Path B: FDR-ranked} & $0.6153 \pm 0.272$ & $0.6462$ & $0.3833 \pm 0.371$ & $0.6659 \pm 0.378$ & $0.0269 \pm 0.044$ & $0.4855$ \\
-\textbf{Path B: SVM-RFE} & $0.7193 \pm 0.073$ & $0.8171$ & $0.1333 \pm 0.183$ & $0.8322 \pm 0.048$ & $-0.0521 \pm 0.188$ & $0.5486$ \\
-\textbf{Path B: RF Importance} & $0.7100 \pm 0.090$ & $0.7981$ & $0.1833 \pm 0.171$ & $0.8238 \pm 0.061$ & $-0.0052 \pm 0.202$ & $0.5219$ \\
-\textbf{Path B: LASSO ($L_1$)} & $0.8353 \pm 0.055$ & $0.9710$ & $0.0000 \pm 0.000$ & $0.9095 \pm 0.033$ & $-0.0444 \pm 0.062$ & $0.4434$ \\
+\textbf{Path B: Welch's $t$\text{-test}} & $0.8430 \pm 0.018$ & $0.9810$ & $0.0000 \pm 0.000$ & $0.9147 \pm 0.011$ & $-0.0315 \pm 0.043$ & $0.5882$ \\
+\textbf{Path B: ANOVA $F$\text{-test}} & $0.8517 \pm 0.034$ & $0.9905$ & $0.0000 \pm 0.000$ & $0.9196 \pm 0.020$ & $-0.0178 \pm 0.040$ & $0.5485$ \\
+\textbf{Path B: FDR-ranked} & $0.6153 \pm 0.272$ & $0.6462$ & $0.3833 \pm 0.371$ & $0.6659 \pm 0.378$ & $0.0269 \pm 0.044$ & $0.4760$ \\
+\textbf{Path B: SVM-RFE} & $0.5690 \pm 0.1337$ & $0.6148$ & $0.3000 \pm 0.1826$ & $0.7045 \pm 0.1069$ & $-0.0561 \pm 0.2122$ & $0.4158$ \\
+\textbf{Path B: RF Importance} & $0.8430 \pm 0.0181$ & $0.9714$ & $0.0500 \pm 0.1118$ & $0.9139 \pm 0.0108$ & $0.0232 \pm 0.1454$ & $0.5630$ \\
+\textbf{Path B: LASSO ($L_1$)} & $0.8023 \pm 0.0824$ & $0.9238$ & $0.0500 \pm 0.1118$ & $0.8869 \pm 0.0535$ & $-0.0229 \pm 0.0850$ & $0.5469$ \\
 \bottomrule
 \end{tabular}
 }
@@ -173,7 +172,7 @@ Table~\ref{tab:gse42568_svm_results} reports performance on the imbalanced GSE42
 \begin{figure}[H]
 \centering
 \includegraphics[width=0.95\textwidth]{figures/fig_gse42568_comparison.png}
-\caption{Accuracy, MCC, and Specificity across all six pipelines on GSE42568. High accuracy alone (blue bars) is a misleading indicator here: the two most "accurate" pipelines, Path A and LASSO, both score $0\%$ specificity and MCC $\le 0$, revealing that their accuracy is an artefact of always predicting the majority class.}
+\caption{Accuracy, MCC, and Specificity across all six uncapped pipelines on GSE42568. High accuracy alone is misleading: Path A, SMOTE, RF, and LASSO all score $0\%$ specificity, revealing majority-class collapse.}
 \label{fig:gse42568_comparison}
 \end{figure}
 
@@ -181,19 +180,19 @@ Table~\ref{tab:gse42568_svm_results} reports performance on the imbalanced GSE42
 
 As shown in Table~\ref{tab:gse42568_svm_results} and Figure~\ref{fig:gse42568_comparison}, the Path A baseline on GSE42568 suffered complete majority-class collapse due to extreme dimensionality ($p=54{,}675$) relative to the sample size ($n=121$), compounded by severe class imbalance ($104$ cancer vs. $17$ normal, i.e.\ $86\%$ cancer). The raw SVM predicted every sample as cancer, yielding an inflated accuracy ($85.97\%$) that at first glance looks competitive with the balanced-dataset results, but a \textbf{Recall/Sensitivity of $100\%$} paired with \textbf{Specificity $=0.0\%$} shows the model never once identified a normal sample. This is confirmed by \textbf{MCC $= 0.0000$}, the value expected under pure majority-class guessing, and by the near-chance \textbf{ROC-AUC of $0.4569$} -- both indicating the classifier has learned no discriminative signal at all. Accuracy alone would have concealed this failure entirely, which is precisely why MCC and specificity are reported as primary metrics for this dataset.
 
-Applying univariate $t$-test feature selection inside the CV folds (\texttt{path\_b\_filter\_ttest}) broke this trivial majority collapse: accuracy \emph{fell} to $62.37\%$, but this is a genuine improvement in model quality, since the pipeline recovered a non-zero \textbf{MCC of $+0.1139$} and raised \textbf{Specificity to $53.33\%$} -- meaning the model now correctly flags roughly half of the normal-tissue samples instead of none. The large standard deviation on this pipeline ($\sigma_{\text{ACC}} = 29.3\%$, $\sigma_{\text{Spec}} = 50.6\%$) reflects how few normal samples ($n=17$) are available per fold: with only $3$--$4$ normal samples per test fold, a single misclassification swings the fold's specificity by $25$--$33$ percentage points, so these numbers should be read as indicative of a genuine but noisy improvement rather than a precise estimate.
+Applying Welch $t$-test selection inside the CV folds (\texttt{path\_b\_filter\_ttest}) does not break the majority-class collapse: accuracy is $84.30\%$, but Specificity remains $0\%$ and MCC is $-0.0315$.
 
-The BH-FDR-ranked selector on GSE42568 behaves differently from the raw filters: it survives the multiple-testing correction with only two probes in the filtered pool and produces a modestly positive MCC ($+0.0269$), but a lower specificity and a noisy estimate than the Welch $t$-test. This is consistent with the fact that the FDR criterion is intentionally conservative and can reject weak evidence when the minority class is tiny. The remaining Path B variants (ANOVA, SVM-RFE, RF-importance) show the same qualitative pattern: accuracy drops to $71$--$72\%$ relative to the Path A baseline, while specificity rises from $0\%$ to $13$--$18\%$. Their MCC values, however, are slightly \emph{negative} ($-0.005$ to $-0.052$), which is worse than the $0.0000$ obtained by random/majority-class guessing. This indicates that although these three selectors do induce some normal-sample recall, the specific $20$-gene subsets they choose are, on balance, weakly \emph{anti}-correlated with the true labels on this dataset -- worse than not discriminating at all. \textbf{LASSO} sits between these two behaviours: it recovers almost none of the majority-class collapse (Specificity $=0.0\%$, matching Path A) while its MCC ($-0.0444$) is also mildly negative, making it the least useful selector for this dataset despite its second-highest raw accuracy ($83.53\%$).
+The BH-FDR-ranked selector is the only Path B method that retains a very small feature set: two genes survive BH correction, yielding MCC $=+0.0269$ and Specificity $=38.33\%$. The corrected SVM-RFE, RF-importance, and LASSO paths retain 121, 415, and 117 features respectively and produce distinct held-out summaries: MCC $=-0.0561$, $+0.0232$, and $-0.0229$. Thus, the larger p-qualified set still tends toward majority-class collapse, while algorithmic selection changes the balance and the conservative two-gene BH-FDR set remains strongest by MCC, although its mean is small and noisy.
 
-Taken together, \textbf{Welch's $t$-test filter is the only pipeline that produces a clearly positive, non-trivial MCC on GSE42568} ($+0.1139$), and it is therefore the recommended Path B variant for this imbalanced dataset -- in direct contrast to GSE19804, where SVM-RFE and the FDR-ranked selector were both competitive. This divergence is itself a finding: the optimal feature-selection strategy is not universal but depends on the class balance and sample size of the target dataset, and it reinforces the importance of evaluating feature-selection methods per dataset rather than assuming a single method dominates across tasks.
+Taken together, the BH-FDR selector is the strongest Path B variant on GSE42568 by MCC ($+0.0269$), but it remains close to chance. A strict multiple-testing threshold is more useful here than retaining thousands of nominally significant genes.
 
 \section{Discussion and Summary}
 
 The empirical evaluation leads to four major findings:
 \begin{enumerate}
-    \item \textbf{On Balanced Datasets (GSE19804):} Wrapper feature selection (SVM-RFE) effectively eliminates uninformative probe noise, enhancing classification accuracy to \textbf{96.67\%} and MCC to \textbf{0.9346} while achieving a $99.96\%$ reduction in feature space. Cheaper univariate filters (ANOVA, $t$-test) trail SVM-RFE by only $1$--$2$ points, making them a reasonable choice when computational cost matters more than the last percentage point of accuracy.
-    \item \textbf{On Imbalanced Datasets (GSE42568):} Accuracy is an unreliable indicator on this dataset -- the two highest-accuracy pipelines (Path A and LASSO) both fail completely on the minority class (Specificity $=0\%$, MCC $\le 0$). Feature selection is necessary but not sufficient to prevent majority-class collapse: only the $t$-test filter achieved a clearly positive MCC, while the wrapper and RF-importance methods, despite reducing accuracy in the "right" direction, produced mildly negative MCC values, showing they selected gene subsets that do not generalise well under this imbalance and small minority-class size ($n=17$).
-    \item \textbf{No Universally Best Selector:} SVM-RFE is optimal for the balanced lung cancer dataset, but Welch's $t$-test is optimal for the imbalanced breast cancer dataset. This suggests the choice of feature-selection method should be validated per dataset rather than fixed in advance, particularly when class balance or sample size differs substantially between tasks.
+    \item \textbf{On Balanced Datasets (GSE19804):} All uncapped Path B methods match the Path A classifier at Accuracy $=95.00\%$ and MCC $=0.9013$; their ROC-AUC values differ only slightly ($0.9792$--$0.9806$).
+    \item \textbf{On Imbalanced Datasets (GSE42568):} The uncapped Welch, ANOVA, wrapper, and LASSO paths all have Specificity $=0\%$ and negative or zero MCC. The two-gene BH-FDR path is strongest by MCC ($+0.0269$), but remains close to chance.
+    \item \textbf{Selection-policy effect:} Larger nominally significant gene sets collapse toward majority-class prediction, while strict BH-FDR filtering retains only two genes and provides the best Path B balance.
     \item \textbf{Leakage Prevention:} Embedding feature selection strictly within cross-validation folds via scikit-learn \texttt{Pipeline} ensures rigorous, unbiased validation of high-dimensional genomic classifiers, and is what allows the majority-class collapse on GSE42568 to be detected in the first place -- had feature selection been performed on the full dataset before splitting, the resulting optimistic bias could have masked this failure mode.
 \end{enumerate}
 
@@ -202,11 +201,9 @@ The empirical evaluation leads to four major findings:
 The principal limitations of the imbalanced GSE42568 analysis are:
 
 \begin{enumerate}
-    \item \textbf{Inner-CV $k$ selection:} The k-sweep selected $k=50$ in three outer folds and $k=100$ in two, and the resulting row achieved MCC $=0.1872 \pm 0.3229$, compared with $0.1139 \pm 0.1693$ for fixed $k=20$ (Table~\ref{tab:gse42568_extensions}). The larger standard deviation means the apparent improvement is uncertain; the results do not justify treating any single $k$ as universally optimal.
+    \item \textbf{Regenerated extension rows:} Threshold tuning improved MCC to $0.0512 \pm 0.2575$ and Specificity to $13.33\%$, while ROC-AUC remained $0.5882 \pm 0.1511$. Logistic regression produced MCC $=-0.0473 \pm 0.0432$.
     
-    \item \textbf{Regenerated extension rows:} Threshold tuning produced the same classification metrics as baseline on these folds, while preserving the same ROC-AUC ($0.6299 \pm 0.1376$); logistic regression produced MCC $=0.1139 \pm 0.1693$ despite its different accuracy, recall, and specificity. These outcomes were recomputed from fresh fold predictions and are retained as dataset-specific results rather than treated as errors.
-    
-    \item \textbf{High variance from small minority class:} With only $n=17$ normal samples split across 5 folds, each fold contains just $3$--$4$ normal samples in the test set. This leads to high-variance estimates of specificity and MCC; a single misclassification swings fold-level specificity by $25$--$33\%$. Consequently, even the Welch $t$-test baseline ($\text{MCC} = +0.1139 \pm 0.169$) carries substantial uncertainty, and the extension variants are similarly noisy.
+    \item \textbf{High variance from small minority class:} With only $n=17$ normal samples split across 5 folds, each fold contains just $3$--$4$ normal samples in the test set. This leads to high-variance estimates of specificity and MCC; the threshold-tuned standard deviation is $0.2575$.
     
     \item \textbf{Scope of extensions:} The SMOTE, threshold tuning, $C$ tuning, and alternative-classifier checks (Table~\ref{tab:gse42568_extensions}) were evaluated only on the Welch $t$-test feature selector. The other five Path B methods were not extended, so it remains unknown whether these tuning strategies would improve their performance on GSE42568.
 \end{enumerate}

@@ -49,11 +49,11 @@ For each probe $j$, we computed the Welch $t$-statistic comparing cancer and nor
 
 where $\bar{x}_{c,j}$ and $\bar{x}_{n,j}$ denote the sample means in the cancer and normal groups, and $n_c$ and $n_n$ are the corresponding sample sizes. The resulting $p$-values were used to rank probes.
 
-\textbf{Selection rule:} To standardize subset size while ensuring statistical significance, the filter methods combine $p$-value filtering with a top-$k$ cap ($k=20$). Probes are first filtered to retain only those with $p \leq \alpha$ ($\alpha = 0.05$). If more than $k$ probes satisfy this threshold, they are ranked by significance ($p$-value ascending or $F$-statistic descending) and capped at the top $k=20$ probes. This ensures that all feature selection methods (filter, wrapper, and embedded) yield consistent, directly comparable $k=20$ feature subsets.
+\textbf{Selection rule:} The regenerated analysis uses uncapped significance selection. Probes are retained when $p \leq \alpha$ ($\alpha = 0.05$), and every probe passing the criterion is kept; no top-$k$ cap is applied. This preserves the full statistical evidence instead of forcing all methods into an arbitrary fixed-size panel.
 
 \subsubsection{ANOVA F-Test}
 
-The ANOVA F-test evaluates whether the between-group variance exceeds the within-group variance for each probe. Probes with larger F-scores and smaller associated $p$-values are treated as more discriminative. As with Welch's $t$-test, the ANOVA filter applies the combined $p \leq 0.05$ significance constraint and top-$k=20$ ranking rule.
+The ANOVA F-test evaluates whether the between-group variance exceeds the within-group variance for each probe. Probes with larger F-scores and smaller associated $p$-values are treated as more discriminative. Under the regenerated policy, every probe with $p \leq 0.05$ is retained; the F-score is used for diagnostics rather than top-$k$ truncation.
 
 \subsubsection{BH-FDR Ranked Filter}
 
@@ -65,7 +65,7 @@ The final filter variant used in the project implements a Benjamini-Hochberg (BH
     \item mutual information between probe expression and class label.
 \end{itemize}
 
-The combined ranking is the arithmetic mean of the three percentile ranks, and the top $k$ probes are selected from this filtered pool. This makes the FDR-ranked selector more conservative than the raw univariate filters: it does not simply take the strongest $k$ unadjusted features, but instead requires statistical evidence after multiple-testing correction before a probe is considered competitive.
+The combined ranking is the arithmetic mean of the three percentile ranks, and all BH survivors are retained in descending combined-rank order. This makes the FDR-ranked selector more conservative than the raw univariate filters: it requires statistical evidence after multiple-testing correction without imposing an additional top-$k$ truncation.
 
 \subsubsection{Within-Fold Resampling for Imbalanced Training}
 
@@ -81,15 +81,15 @@ The classification threshold was not fixed at the default value $0.5$ for the im
 
 This thresholding step was computed from the raw decision-function values rather than from probability estimates, avoiding the additional Platt-scaling cross-validation that would otherwise be triggered by setting the SVM to use \texttt{probability=True}. The same underlying decision score is also used to report the default-threshold and tuned-threshold comparisons for the imbalanced dataset.
 
-\subsubsection{Nested Tuning of $k$ and $C$}
+\subsubsection{Inner-CV Tuning of $C$}
 
-Two additional model-selection steps were added for the imbalanced setting. First, the subset size $k$ was swept over $\{10, 20, 50, 100\}$ inside an inner cross-validation loop, and the value maximizing mean MCC was retained for the outer evaluation. Second, the SVM regularization parameter $C$ was tuned with a compact inner-CV search over $\{0.01, 0.1, 1, 10, 100\}$, while comparing class-weight settings of either \texttt{None} or \texttt{"balanced"}. This keeps the SVM optimization consistent with the class-imbalance problem without expanding the experimental design into an unnecessarily expensive double-nested loop beyond the required model-selection steps.
+The regenerated analysis does not tune or select a feature-count parameter $k$. Every feature passing the active $p$-value or BH-FDR rule is retained, so introducing a $k$ sweep would contradict the uncapped selection policy. The SVM regularization parameter $C$ remains tuned within each outer training fold using an inner stratified cross-validation search over $\{0.01, 0.1, 1, 10, 100\}$, while comparing class-weight settings of either \texttt{None} or \texttt{"balanced"}. The held-out outer fold is never used to choose $C$.
 
 \subsection{Wrapper Methods}
 
 \subsubsection{SVM-RFE and Random-Forest Importance}
 
-Wrapper methods were implemented with an ANOVA-based prefiltering step. In each training fold, the pipeline first computes ANOVA statistics and retains a reduced candidate set before any wrapper search begins. This step is important for two reasons: it makes the wrapper search computationally tractable on tens of thousands of probes, and it removes features with weak univariate signal before a multivariate model is fit.
+Wrapper methods were implemented with an ANOVA-based significance prefiltering step. In each training fold, the pipeline computes ANOVA statistics and retains every candidate satisfying the active p-value threshold before the wrapper model is fit. SVM-RFE then iteratively eliminates the lowest absolute-coefficient features until the retained set reaches the sample count of the fitting data, a data-dependent bound ($n_{\mathrm{features}} \approx n_{\mathrm{samples}}$) that avoids an arbitrary fixed $k$. Note that this bound is evaluated against the dataset actually passed to the selector: the Chapter 3 feature-selection tables run this stopping rule once against the full dataset (120 samples for GSE19804, 121 for GSE42568), producing the 120/121-feature sets reported there as a standalone characterization of each method. The Chapter 4 classifier evaluation instead fits the same selector inside each cross-validation training fold (approximately 80\% of the data), so the retained feature count there varies fold-to-fold and is smaller than the Chapter 3 figures; the two chapters are not reporting the same selection run. Random Forest importance retains only candidates whose impurity importance exceeds the mean importance; if the mean threshold is empty, the maximum-importance feature is retained.
 
 The retained candidate set is then passed to either:
 \begin{itemize}
@@ -97,13 +97,13 @@ The retained candidate set is then passed to either:
     \item \textbf{Random-Forest importance}, which ranks probes by impurity reduction.
 \end{itemize}
 
-Greedy forward and backward selection were removed from the implementation because they required orders of magnitude more model fits and were not competitive in this high-dimensional setting.
+The active wrapper implementations are SVM-RFE and Random Forest importance; both operate on the fold-local ANOVA-qualified candidate pool and apply their own algorithmic stopping rules.
 
 \subsection{Embedded Methods}
 
 \subsubsection{LASSO (L1-Regularized Logistic Regression)}
 
-The embedded selector uses L1-regularized logistic regression. The model minimizes a penalized logistic-loss objective and forces many coefficients to zero, yielding a sparse set of selected probes. In the implementation, the regularization strength is selected by cross-validated logistic regression over a grid of inverse-regularization values $C$; smaller values of $C$ imply stronger regularization. If the cross-validated fit fails, the code falls back to a fixed-$C$ LASSO model.
+The embedded selector uses L1-regularized logistic regression. The model minimizes a penalized logistic-loss objective, and the regularization strength is selected by cross-validated logistic regression over an expanded grid of inverse-regularization values $C$ from $10^{-4}$ to $10^{1}$; smaller values of $C$ imply stronger regularization. The retained features are exactly those with nonzero fitted coefficients. If the selected $C$ produces an all-zero or all-nonzero solution, the implementation selects the sparsest non-degenerate candidate from the grid and records that fallback; it never replaces the result with the ANOVA candidate set.
 
 \section{Evaluation Metrics}
 
@@ -115,4 +115,4 @@ A 5-fold stratified cross-validation strategy was used throughout the study. Thi
 
 \section{Comparative Analysis of Selected Feature Sets}
 
-The project compares feature sets not only by predictive performance but also by overlap across methods. Because the filter methods can retain a large number of probes when a permissive p-value threshold is used, overlap is interpreted as a qualitative measure of stability rather than as a strict top-$k$ comparison. The generated summary files store the full selected feature lists for each method and dataset, making the comparison reproducible.
+The project compares feature sets primarily by predictive performance and retained-feature counts. Because the uncapped policy can retain a large number of probes, the generated summary files store the complete selected feature lists for each method and dataset; no fixed top-$k$ overlap or compact-panel claim is made.

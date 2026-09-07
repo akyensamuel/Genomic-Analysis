@@ -25,7 +25,7 @@ This project investigates the comparative impact of different feature selection 
 ### Completed
 
 - **Preprocessing pipeline** (`scripts/preprocessing.py`): GEO download, log2 transformation, z-score normalization, `.npy` cache + CSV export
-- **Feature selection pipeline** (`scripts/feature_selection.py`): all five methods with dual selection rules (top-*k* or p-value threshold)
+- **Feature selection pipeline** (`scripts/feature_selection.py`): all methods with uncapped p-value/BH-FDR selection by default
 - **Feature selection runs** on GSE19804 and GSE42568 (results under `results/feature_selection/`)
 - **SVM evaluation framework** (`scripts/svm_classifier.py`, `scripts/svm_comparative.py`): Path A baseline + Path B with feature selection inside each CV fold
 - **Integration tests** (`tests/test_svm_integration.py`)
@@ -34,7 +34,7 @@ This project investigates the comparative impact of different feature selection 
 ### In Progress
 
 - **SVM classifier evaluation**: run full pipeline on both datasets and populate Chapter 4 with quantitative results
-- **Experimental consistency**: align selection rules (top-*k* vs p-value threshold) across datasets before final comparison
+- **Experimental consistency**: apply the same uncapped p-value/BH-FDR selection policy across datasets before final comparison
 
 ### Pending
 
@@ -75,7 +75,7 @@ Downloads (or loads cached) GEO series matrices, applies log2(*x* + 1) and per-f
 
 ### Step 2 — Feature Selection
 
-Runs filter, wrapper, and embedded selectors. Wrapper methods use an ANOVA prefilter (top 500 by default) before SVM-RFE or Random Forest ranking.
+Runs filter, wrapper, and embedded selectors. With `--p-value`, filters retain every qualifying gene; SVM-RFE stops at the training-sample bound, Random Forest keeps above-mean importances, and LASSO keeps nonzero coefficients.
 
 ### Step 3 — SVM Evaluation
 
@@ -92,19 +92,18 @@ The pipeline supports two selection modes, controlled by CLI flags:
 
 | Mode | Flag | Behaviour |
 |------|------|-----------|
-| **Top-*k*** (default) | `--n-features 20` | Retain the 20 most significant features (filters) or run RFE/LASSO to 20 features (wrappers/embedded) |
-| **P-value threshold** | `--p-value 0.05` | Filter methods retain **all** probes with *p* ≤ threshold; wrappers cap the prefilter at 500 |
+| **P-value threshold** | `--p-value 0.05` | Retain **all** genes passing the p-value criterion; no top-*k* cap is applied |
 
 **Methods implemented:** `filter_ttest`, `filter_anova`, `wrapper_svm`, `wrapper_rf`, `embedded_lasso`
 
-Greedy forward/backward wrapper selection was removed for computational tractability.
+The active wrapper methods are SVM-RFE and Random Forest importance.
 
 ### Current runs (August 2026)
 
 | Dataset | Filter methods | Wrapper / LASSO | Notes |
 |---------|----------------|-----------------|-------|
-| GSE19804 | 20 features each | 20 features each | Standardized `--n-features 20 --p-value 0.05` |
-| GSE42568 | 20 features each | 20 features each | Standardized `--n-features 20 --p-value 0.05` |
+| GSE19804 | All genes passing the threshold | All genes passing the threshold | Use `--p-value` for uncapped statistical selection |
+| GSE42568 | All genes passing the threshold | All genes passing the threshold | Use `--p-value` for uncapped statistical selection |
 
 > **Note:** Both datasets are evaluated under identical selection parameters ($p \le 0.05, k = 20$), providing a direct cross-dataset and cross-method comparison.
 
@@ -142,7 +141,7 @@ GenomicsProj/
 │       └── GSE42568/
 ├── datasets/                             # Raw GEO downloads (gitignored)
 ├── preprocessed_datasets/                # Cached .npy + CSV (gitignored)
-├── Genomic_data_analysis (3).ipynb       # Legacy exploratory notebook
+├── Genomic_data_analysis (3).ipynb       # Exploratory notebook
 ├── requirements.txt
 └── venv_python_runner.bat                # Windows helper for venv Python
 ```
@@ -218,8 +217,8 @@ python scripts/feature_selection.py --dataset DATASET [OPTIONS]
 **Optional Arguments:**
 | Flag | Short | Type | Default | Description |
 |------|-------|------|---------|-------------|
-| `--n-features N` | `-n` | int | 20 | Number of top features to select per method (top-*k* mode) |
-| `--p-value P` | — | float | None | P-value threshold for filter methods. If set, filters select **all** probes with *p* ≤ P instead of top-*k* |
+| `--n-features N` | `-n` | int | 20 | Retained CLI option; ignored when statistical selection is active |
+| `--p-value P` | — | float | 0.05 | Uncapped p-value/BH-FDR mode. All genes passing the relevant threshold are retained; `--n-features` is ignored |
 | `--label-col COL` | `-l` | str | `label` | Name of the label column in CSV |
 | `--methods M1 M2 ...` | `-m` | list | All | Methods to run. Choices: `filter_ttest`, `filter_anova`, `fdr_ranked`, `wrapper_svm`, `wrapper_rf`, `embedded_lasso` |
 | `--lasso-cs C1,C2,...` | — | str | Logspace | Comma-separated C values for LASSO cross-validation tuning |
@@ -235,7 +234,7 @@ python scripts/feature_selection.py --dataset DATASET [OPTIONS]
 
 **Examples:**
 
-**Top-*k* selection (20 features per method — recommended):**
+**Uncapped statistical selection (default):**
 ```bash
 python scripts/feature_selection.py --dataset GSE19804 --n-features 20
 python scripts/feature_selection.py --dataset GSE42568 --n-features 20
@@ -413,7 +412,7 @@ latexmk -c
 
 ### Common Workflows
 
-#### **Workflow 1: Full reproducible analysis (GSE19804, top-20 features)**
+#### **Workflow 1: Full reproducible analysis (GSE19804, uncapped statistical selection)**
 
 ```bash
 # 1. Preprocess
@@ -466,7 +465,7 @@ python scripts/feature_selection.py --dataset GSE19804 --p-value 0.01
 python scripts/feature_selection.py --dataset GSE19804 --p-value 0.05
 python scripts/feature_selection.py --dataset GSE19804 --p-value 0.10
 
-# Note: Wrappers always prefilter at p ≤ 0.05 then cap at top-k
+# With --p-value, wrappers apply their algorithmic stopping rules after the significance prefilter.
 # (see --lasso-cs for LASSO tuning parameters)
 ```
 
@@ -512,5 +511,5 @@ All metrics are aggregated as mean ± std across CV folds.
 
 - The small-*n*, large-*p* setting (p/n ≈ 450:1) makes overfitting inevitable without feature selection; baseline SVM on the full feature set is expected to perform poorly.
 - Preprocessing (log2 + z-score) is applied to the full dataset before CV; the scaler is not refit per fold — a known simplification documented in the thesis.
-- Filter methods with a permissive p-value threshold (e.g. 0.05) can retain thousands of probes; wrapper and embedded methods always produce compact subsets.
-- Choose one selection policy (top-*k* or p-value) and apply it consistently across datasets before drawing final comparative conclusions.
+- Filter methods with a permissive p-value threshold (e.g. 0.05) can retain thousands of probes; in threshold mode no method applies a top-*k* cap.
+- Apply the same uncapped p-value/BH-FDR thresholds consistently across datasets before drawing final comparative conclusions.

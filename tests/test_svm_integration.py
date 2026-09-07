@@ -68,6 +68,28 @@ def test_wrapper_rf_fallback_returns_features():
     assert len(selector.selected_features) > 0
 
 
+def test_model_selectors_are_not_anova_aliases():
+    df = pd.read_csv('tests/synthetic.csv', index_col=0)
+    y = df['label'].to_numpy(dtype=int)
+    X = df.drop(columns=['label']).to_numpy()
+
+    # Use a permissive threshold so the ANOVA candidate pool is materially
+    # larger than the sample-count RFE stopping bound.
+    threshold = 1.0
+    anova = FeatureSelector(method='filter_anova', n_features=5, p_value=threshold)
+    anova.fit(X, y)
+    anova_set = set(anova.selected_features.tolist())
+
+    selected_sets = {}
+    for method in ('wrapper_svm', 'wrapper_rf', 'embedded_lasso'):
+        selector = FeatureSelector(method=method, n_features=5, p_value=threshold)
+        selector.fit(X, y)
+        selected_sets[method] = set(selector.selected_features.tolist())
+
+    assert all(features != anova_set for features in selected_sets.values())
+    assert len(set(map(frozenset, selected_sets.values()))) == 3
+
+
 def test_youden_threshold_uses_decision_scores():
     scores = np.array([-2.0, -1.0, 0.0, 1.0, 2.0])
     labels = np.array([0, 0, 1, 1, 1])
