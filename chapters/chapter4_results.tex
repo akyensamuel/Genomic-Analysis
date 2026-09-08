@@ -52,7 +52,7 @@ Table~\ref{tab:gse19804_probes} reports the regenerated retained-gene counts for
 
 \begin{table}[H]
 \centering
-\caption{Uncapped feature counts on GSE19804 under the $p \leq 0.05$ selection policy. The complete feature lists are stored in the regenerated result files. The retained-feature counts in this chapter are computed on the full dataset as a standalone characterization of each method's behavior; the fold-local counts used inside the Chapter 4 cross-validation pipeline differ and are not reproduced here.}
+\caption{Uncapped feature counts on GSE19804 under the $p \leq 0.05$ selection policy. The complete feature lists are stored in the regenerated result files. The retained-feature counts in this chapter are computed on the full dataset as a standalone characterization of each method's behavior; the fold-local counts used inside the Chapter~5 cross-validation pipeline differ and are not reproduced here.}
 \label{tab:gse19804_probes}
 \small
 \begin{tabular}{lcc}
@@ -83,7 +83,7 @@ Pairwise overlap counts are not interpreted as a fixed-panel consensus because t
 
     \item \textbf{Random Forest Importance (Wrapper):} Retains features whose impurity importance exceeds the mean, producing 333 features; this is an algorithm-driven subset rather than an ANOVA alias.
 
-    \item \textbf{XGBoost Importance (Wrapper):} An ANOVA pre-filter narrows the search space to 25,707 candidates; XGBoost is then fitted and features with above-mean gain importance are kept, producing \textbf{46 features} (99.92\% reduction). This is the most compact wrapper output on GSE19804 and corresponds to the XGBoost classifier's superior downstream accuracy of 97.50\% reported in Chapter~4.
+    \item \textbf{XGBoost Importance (Wrapper):} An ANOVA pre-filter narrows the search space to 25,707 candidates; XGBoost is then fitted and features with above-mean gain importance are kept, producing \textbf{46 features} (99.92\% reduction). This is the most compact wrapper output on GSE19804 and corresponds to the XGBoost classifier's superior downstream accuracy of 97.50\% reported in Chapter~5.
 
     \item \textbf{LASSO Embedded:} Retains the 245 nonzero $L_1$ coefficients from the cross-validated sparse model.
 \end{enumerate}
@@ -92,11 +92,11 @@ Pairwise overlap counts are not interpreted as a fixed-panel consensus because t
 
 \subsection{Selected Probe Sets by Method}
 
-On the imbalanced GSE42568 breast cancer dataset, 54,675 probes were evaluated across 121 samples (104 cancer, 17 normal). Under corrected uncapped selection, Welch's $t$-test retained 6,706 genes, ANOVA retained 3,217, SVM-RFE retained 121, RF importance retained 415, XGBoost importance retained 61, LASSO retained 117, and BH-FDR retained 2 genes. Table~\ref{tab:gse42568_probes} reports these regenerated counts; complete feature lists are stored in the result files.
+On the imbalanced GSE42568 breast cancer dataset, 54,675 probes were evaluated across 121 samples (104 cancer, 17 normal). Under corrected uncapped selection, Welch's $t$-test retained 6,706 genes, ANOVA retained 3,217, SVM-RFE retained 121, RF importance retained 415, XGBoost importance retained 61, LASSO retained 117, and BH-FDR retained 2 genes. Table~\ref{tab:gse42568_historical_probes} reports these regenerated counts; complete feature lists are stored in the result files.
 
 \begin{table}[H]
 \centering
-\caption{Uncapped feature counts on GSE42568 under the regenerated statistical-selection policy. The retained-feature counts in this chapter are computed on the full dataset as a standalone characterization of each method's behavior; the fold-local counts used inside the Chapter 4 cross-validation pipeline differ and are not reproduced here.}
+\caption{Uncapped feature counts on GSE42568 under the regenerated statistical-selection policy. The retained-feature counts in this chapter are computed on the full dataset as a standalone characterization of each method's behavior; the fold-local counts used inside the Chapter~5 cross-validation pipeline differ and are not reproduced here.}
 \label{tab:gse42568_historical_probes}
 \small
 \begin{tabular}{lcc}
@@ -217,5 +217,5 @@ Three key findings emerge from comparing the two datasets:
 
     \item \textbf{No fixed-panel consensus is claimed.} The uncapped policy reports complete retained sets rather than comparing arbitrary top-ranked subsets.
 
-    \item \textbf{Wrapper and embedded methods now have independent stopping rules.} SVM-RFE, RF importance, XGBoost gain importance, and nonzero LASSO coefficients each produce distinct retained sets and downstream metrics rather than duplicating ANOVA. The XGBoost wrapper yields the most compact set on both datasets (46 on GSE19804; 61 on GSE42568) and achieves the highest downstream classification accuracy on the balanced dataset (97.50\% Accuracy, 0.9530 MCC — see Chapter~4).
+    \item \textbf{Wrapper and embedded methods now have independent stopping rules.} SVM-RFE, RF importance, XGBoost gain importance, and nonzero LASSO coefficients each produce distinct retained sets and downstream metrics rather than duplicating ANOVA. The XGBoost wrapper yields the most compact set on both datasets (46 on GSE19804; 61 on GSE42568) and achieves the highest downstream classification accuracy on the balanced dataset (97.50\% Accuracy, 0.9530 MCC --- see Chapter~5).
 \end{enumerate}

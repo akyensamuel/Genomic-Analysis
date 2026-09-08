@@ -89,7 +89,7 @@ The regenerated analysis does not tune or select a feature-count parameter $k$. 
 
 \subsubsection{SVM-RFE and Random-Forest Importance}
 
-Wrapper methods were implemented with an ANOVA-based significance prefiltering step. In each training fold, the pipeline computes ANOVA statistics and retains every candidate satisfying the active p-value threshold before the wrapper model is fit. SVM-RFE then iteratively eliminates the lowest absolute-coefficient features until the retained set reaches the sample count of the fitting data, a data-dependent bound ($n_{\mathrm{features}} \approx n_{\mathrm{samples}}$) that avoids an arbitrary fixed $k$. Note that this bound is evaluated against the dataset actually passed to the selector: the Chapter 3 feature-selection tables run this stopping rule once against the full dataset (120 samples for GSE19804, 121 for GSE42568), producing the 120/121-feature sets reported there as a standalone characterization of each method. The Chapter 4 classifier evaluation instead fits the same selector inside each cross-validation training fold (approximately 80\% of the data), so the retained feature count there varies fold-to-fold and is smaller than the Chapter 3 figures; the two chapters are not reporting the same selection run. Random Forest importance retains only candidates whose impurity importance exceeds the mean importance; if the mean threshold is empty, the maximum-importance feature is retained.
+Wrapper methods were implemented with an ANOVA-based significance prefiltering step. In each training fold, the pipeline computes ANOVA statistics and retains every candidate satisfying the active p-value threshold before the wrapper model is fit. SVM-RFE then iteratively eliminates the lowest absolute-coefficient features until the retained set reaches the sample count of the fitting data, a data-dependent bound ($n_{\mathrm{features}} \approx n_{\mathrm{samples}}$) that avoids an arbitrary fixed $k$. Note that this bound is evaluated against the dataset actually passed to the selector: the Chapter~4 feature-selection tables run this stopping rule once against the full dataset (120 samples for GSE19804, 121 for GSE42568), producing the 120/121-feature sets reported there as a standalone characterization of each method. The Chapter~5 classifier evaluation instead fits the same selector inside each cross-validation training fold (approximately 80\% of the data), so the retained feature count there varies fold-to-fold and is smaller than the Chapter~4 figures; the two chapters are not reporting the same selection run. Random Forest importance retains only candidates whose impurity importance exceeds the mean importance; if the mean threshold is empty, the maximum-importance feature is retained.
 
 The retained candidate set is then passed to either:
 \begin{itemize}
@@ -97,7 +97,11 @@ The retained candidate set is then passed to either:
     \item \textbf{Random-Forest importance}, which ranks probes by impurity reduction.
 \end{itemize}
 
-The active wrapper implementations are SVM-RFE and Random Forest importance; both operate on the fold-local ANOVA-qualified candidate pool and apply their own algorithmic stopping rules.
+\subsubsection{XGBoost Gain Importance}
+
+A third wrapper method uses a gradient-boosted tree ensemble (XGBoost) to rank features by their cumulative gain contribution. The same ANOVA pre-filter described above first narrows the candidate set to probes satisfying $p \leq 0.05$. An XGBClassifier with the \texttt{gbtree} booster is then trained on the pre-filtered features using gain-based importance scoring. Features whose gain importance exceeds the mean importance across all retained features are kept; the remainder are discarded. This produces a compact, data-driven subset that is typically smaller than both the SVM-RFE and Random Forest wrappers (46 features on GSE19804, 61 on GSE42568). The XGBoost wrapper is particularly effective at identifying nonlinear discriminative features that linear methods may underweight.
+
+The active wrapper implementations are SVM-RFE, Random Forest importance, and XGBoost gain importance; all three operate on the fold-local ANOVA-qualified candidate pool and apply their own algorithmic stopping rules.
 
 \subsection{Embedded Methods}
 
