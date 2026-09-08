@@ -70,6 +70,8 @@ Wrapper methods use a machine learning model to evaluate subsets of genes. A typ
 
 RFE captures inter-gene dependencies but is computationally expensive.
 
+\paragraph{Gradient Boosting (XGBoost) Importance.} Another wrapper approach uses ensemble trees like XGBoost. The model is trained on the candidate features, and the features are ranked by their gain (the improvement in accuracy brought by a feature to the branches it is on). Features whose gain importance exceeds a certain threshold (e.g., the mean importance) are retained, providing a compact and highly discriminative subset.
+
 \subsubsection{Embedded Methods}
 
 In embedded methods, feature selection occurs as part of the model training process. The model itself decides which genes are important. Common examples include LASSO and Random Forest feature importance.

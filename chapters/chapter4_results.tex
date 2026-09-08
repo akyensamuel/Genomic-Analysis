@@ -42,6 +42,8 @@ Embedded & \texttt{embedded\_lasso} (nonzero $L_1$) & 245 & 117 & 99.55\% & 99.7
 
 The reduction is calculated as $100 \times (1 - n_{\text{selected}}/54{,}675)$: for example, $25{,}695$ retained probes correspond to $53.00\%$ reduction, while two retained probes correspond to $100.00\%$ reduction at the displayed precision. These are counts of all genes passing the relevant threshold, not top-ranked gene counts. The XGBoost wrapper's 46 and 61 probes reflect the gain-based importance threshold applied on top of the ANOVA pre-filtered candidate set.
 
+Notably, the Benjamini-Hochberg False Discovery Rate (BH-FDR) method retained only 2 genes out of 54,675 for the GSE42568 dataset. This extreme reduction is a direct consequence of the dataset's severe class imbalance (104 cancer vs. 17 normal samples). While standard nominal p-value tests identify thousands of ostensibly significant genes, applying the strict FDR penalty to adjust for the massive multiple-testing problem across the entire probe set ruthlessly prunes weak correlations. Only two genes demonstrated a strong enough differential expression signal to survive this stringent mathematical correction, underscoring the difficulty of finding robust, statistically significant biomarkers in highly imbalanced, high-dimensional spaces.
+
 \section{Feature Selection Results on GSE19804 (Lung Cancer)}
 
 \subsection{Selected Probe Sets by Method}
