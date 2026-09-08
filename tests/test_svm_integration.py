@@ -68,6 +68,38 @@ def test_wrapper_rf_fallback_returns_features():
     assert len(selector.selected_features) > 0
 
 
+def test_wrapper_xgb_returns_features():
+    df = pd.read_csv('tests/synthetic.csv', index_col=0)
+    y = df['label'].to_numpy(dtype=int)
+    X = df.drop(columns=['label']).to_numpy()
+
+    selector = FeatureSelector(method='wrapper_xgb', n_features=5, p_value=0.05)
+    selector.fit(X, y)
+
+    assert selector.selected_features is not None
+    assert len(selector.selected_features) > 0
+
+
+def test_xgb_classifier_alternative():
+    rng = np.random.default_rng(0)
+    X = pd.DataFrame(rng.normal(size=(12, 8)))
+    y = np.array([0, 0, 0, 0, 0, 0, 0, 0, 1, 1, 1, 1], dtype=int)
+
+    classifier = SVMClassifierWithCV.__new__(SVMClassifierWithCV)
+    classifier.X = X
+    classifier.y = y
+    classifier.n_splits = 2
+    classifier.random_state = 42
+    classifier.n_features = 2
+    classifier.p_value = 0.05
+    classifier.results = {}
+
+    classifier.train_path_b_optimized(feature_method='filter_ttest', n_features=2, p_value=1.0, alternative_classifier='xgboost')
+
+    assert 'path_b_filter_ttest_xgboost' in classifier.results
+    assert 'summary' in classifier.results['path_b_filter_ttest_xgboost']
+
+
 def test_model_selectors_are_not_anova_aliases():
     df = pd.read_csv('tests/synthetic.csv', index_col=0)
     y = df['label'].to_numpy(dtype=int)
@@ -81,13 +113,13 @@ def test_model_selectors_are_not_anova_aliases():
     anova_set = set(anova.selected_features.tolist())
 
     selected_sets = {}
-    for method in ('wrapper_svm', 'wrapper_rf', 'embedded_lasso'):
+    for method in ('wrapper_svm', 'wrapper_rf', 'wrapper_xgb', 'embedded_lasso'):
         selector = FeatureSelector(method=method, n_features=5, p_value=threshold)
         selector.fit(X, y)
         selected_sets[method] = set(selector.selected_features.tolist())
 
     assert all(features != anova_set for features in selected_sets.values())
-    assert len(set(map(frozenset, selected_sets.values()))) == 3
+    assert len(set(map(frozenset, selected_sets.values()))) == 4
 
 
 def test_youden_threshold_uses_decision_scores():

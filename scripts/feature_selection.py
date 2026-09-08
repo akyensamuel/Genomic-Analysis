@@ -68,6 +68,7 @@ from sklearn.linear_model import LogisticRegression, LogisticRegressionCV
 from sklearn.base import BaseEstimator, TransformerMixin
 import matplotlib.pyplot as plt
 from sklearn.svm import LinearSVC
+from xgboost import XGBClassifier
 
 # scikit-learn 1.8 still references ast.Num on Python 3.14, where that
 # compatibility alias may be absent. Restore the alias before estimators load.
@@ -99,6 +100,7 @@ class FeatureSelector(BaseEstimator, TransformerMixin):
         "filter_fdr_ranked": "FDR-Ranked (F-score + MI + Effect Size)",
         "wrapper_svm":      "SVM-RFE (Wrapper)",
         "wrapper_rf":       "RandomForest Importance (Wrapper)",
+        "wrapper_xgb":      "XGBoost Importance (Wrapper)",
         "embedded_lasso":   "LASSO / L1 Logistic (Embedded)",
     }
 
@@ -138,6 +140,7 @@ class FeatureSelector(BaseEstimator, TransformerMixin):
             "filter_fdr_ranked": self._fit_fdr_ranked,
             "wrapper_svm":      self._fit_wrapper_svm,
             "wrapper_rf":       self._fit_wrapper_rf,
+            "wrapper_xgb":      self._fit_wrapper_xgb,
             "embedded_lasso":   self._fit_embedded_lasso,
         }
         if self.method not in dispatch:
@@ -394,6 +397,43 @@ class FeatureSelector(BaseEstimator, TransformerMixin):
         except Exception as exc:
             logger.exception("  RandomForest importance failed")
             raise RuntimeError("RandomForest importance selection failed") from exc
+
+    def _fit_wrapper_xgb(self, X: np.ndarray, y: np.ndarray) -> None:
+        logger.info("[wrapper_xgb]  XGBoost importance prefilter (with ANOVA pre-filter) …")
+        X_pre, pre_idx = self._prefilter(X, y)
+        logger.info(f"  Pre-filtered to {X_pre.shape[1]} features, fitting XGBoost …")
+        
+        n_pos = np.sum(y == 1)
+        n_neg = np.sum(y == 0)
+        scale_pos_weight = float(n_neg / n_pos) if n_pos > 0 else 1.0
+
+        xgb_model = XGBClassifier(
+            n_estimators=100,
+            learning_rate=0.1,
+            max_depth=3,
+            scale_pos_weight=scale_pos_weight,
+            eval_metric="logloss",
+            random_state=42,
+            n_jobs=1,
+            use_label_encoder=False,
+        )
+        try:
+            xgb_model.fit(X_pre, y)
+            importances = xgb_model.feature_importances_
+            threshold = float(np.mean(importances))
+            keep = importances > threshold
+            if not np.any(keep):
+                keep[np.argmax(importances)] = True
+                self.selection_rule = "xgb_importance(maximum_fallback)"
+            else:
+                self.selection_rule = f"xgb_importance(>mean={threshold:.6g})"
+            selected_orig_idx = pre_idx[keep]
+            self.selected_features = np.sort(selected_orig_idx)
+            self.feature_scores = importances
+            logger.info(f"  → {len(self.selected_features)} features selected ({self.selection_rule})")
+        except Exception as exc:
+            logger.exception("  XGBoost importance failed")
+            raise RuntimeError("XGBoost importance selection failed") from exc
 
     # Note: greedy forward/backward wrapper methods removed — they were
     # computationally prohibitive on high-dimensional genomic data and

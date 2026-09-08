@@ -21,11 +21,15 @@ from __future__ import annotations
 import json
 import logging
 import sys
+import threading
 from datetime import datetime
 from pathlib import Path
 from typing import Optional
+from concurrent.futures import ThreadPoolExecutor, as_completed
+
 import numpy as np
 import pandas as pd
+from scipy.stats import wilcoxon
 from sklearn.metrics import (
     accuracy_score,
     confusion_matrix,
@@ -38,10 +42,10 @@ from sklearn.metrics import (
 from sklearn.model_selection import StratifiedKFold
 from sklearn.pipeline import Pipeline
 from sklearn.svm import SVC
+from xgboost import XGBClassifier
 from sklearn.linear_model import LogisticRegression
 from sklearn.ensemble import RandomForestClassifier
 from sklearn.base import clone
-from scipy.stats import wilcoxon
 from imblearn.over_sampling import SMOTE
 from concurrent.futures import ThreadPoolExecutor, as_completed
 import threading
@@ -540,6 +544,24 @@ class SVMClassifierWithCV:
                 clf.fit(X_train_selected, y_train)
                 y_pred = clf.predict(X_test_selected)
                 y_pred_proba = clf.predict_proba(X_test_selected)
+            elif alternative_classifier == 'xgboost':
+                n_pos = np.sum(y_train == 1)
+                n_neg = np.sum(y_train == 0)
+                scale_pos_weight = float(n_neg / n_pos) if n_pos > 0 else 1.0
+                clf = XGBClassifier(
+                    n_estimators=300,
+                    learning_rate=0.1,
+                    max_depth=3,
+                    scale_pos_weight=scale_pos_weight,
+                    eval_metric="logloss",
+                    random_state=self.random_state,
+                    n_jobs=1,
+                    use_label_encoder=False,
+                    booster="gbtree"
+                )
+                clf.fit(X_train_selected, y_train)
+                y_pred = clf.predict(X_test_selected)
+                y_pred_proba = clf.predict_proba(X_test_selected)
             else:
                 model = SVC(
                     kernel="linear",
@@ -598,6 +620,7 @@ class SVMClassifierWithCV:
                 {"label": f"{method}_c_tuned", "apply_smote": False, "tune_threshold": False, "tune_c": True, "alternative_classifier": None},
                 {"label": f"{method}_logreg", "apply_smote": False, "tune_threshold": False, "tune_c": False, "alternative_classifier": "logistic_regression"},
                 {"label": f"{method}_rf", "apply_smote": False, "tune_threshold": False, "tune_c": False, "alternative_classifier": "random_forest"},
+                {"label": f"{method}_xgb", "apply_smote": False, "tune_threshold": False, "tune_c": False, "alternative_classifier": "xgboost"},
             ]:
                 try:
                     self.train_path_b_optimized(feature_method=method, n_features=self.n_features, p_value=self.p_value, apply_smote=config["apply_smote"], tune_threshold=config["tune_threshold"], tune_c=config["tune_c"], alternative_classifier=config["alternative_classifier"])
