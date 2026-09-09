@@ -103,7 +103,7 @@ Table~\ref{tab:gse19804_svm_results} presents the 5-fold stratified cross-valida
 
 \begin{table}[H]
 \centering
-\caption{5-Fold Stratified Cross-Validation performance on GSE19804 using uncapped $p \le 0.05$ selection.}
+\caption{5-Fold Stratified Cross-Validation performance on GSE19804 using $p \le 0.05$ selection.}
 \label{tab:gse19804_svm_results}
 \small
 \resizebox{\textwidth}{!}{
@@ -209,4 +209,4 @@ The principal limitations of the imbalanced GSE42568 analysis are:
     \item \textbf{Scope of extensions:} The SMOTE, threshold tuning and $C$ tuning (Table~\ref{tab:gse42568_extensions}) were evaluated only on the Welch $t$-test feature selector. The other five Path B methods were not extended, so it's unknown whether these tuning strategies would improve their performance on GSE42568.
 \end{enumerate}
 
-Despite these limitations, the results demonstrate failure of the full-dimensional baseline (Path A) on GSE42568 and show that feature selection changes the balance between sensitivity and specificity.
+Despite these limitations, the results demonstrate failure of the full-dimensional baseline (Path A) on GSE42568 and show that feature selection changes the balance between sensitivity and specificity.F

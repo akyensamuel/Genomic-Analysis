@@ -15,11 +15,11 @@ The comparative feature-selection script was rerun with $p \leq 0.05$ for the We
 
 The filtering methods apply a significance rule based on either raw $p \leq 0.05$ or BH-adjusted FDR $q \leq 0.05$. Wrapper and embedded methods use the p-qualified candidate set as input but apply their own algorithmic stopping rules: SVM-RFE stops at the training-sample bound, RF and XGBoost importance wrappers keep features whose importance exceeds the mean, and LASSO keeps nonzero coefficients. The BH-FDR-ranked selector is intentionally more conservative: it retains only features that survive multiple-testing correction and then orders those survivors by a combined F-score / effect-size / mutual-information score. The XGBoost wrapper applies an ANOVA pre-filter first and then fits an XGBoost classifier, retaining features whose gain-based importance exceeds the mean.
 
-Table~\ref{tab:feature_selection_counts} summarizes the comparison-stage results. The main outcome is that uncapped nominal p-value selection retains thousands of probes, whereas BH-FDR can be much more stringent and retain only a handful when the statistical evidence is weak.
+Table~\ref{tab:feature_selection_counts} summarizes the comparison-stage results. The main outcome is that nominal p-value selection retains thousands of probes, whereas BH-FDR can be much more stringent and retain only a handful when the statistical evidence is weak.
 
 \begin{table}[H]
 \centering
-\caption{Feature-selection summary from the uncapped comparison runs.}
+\caption{Feature-selection summary from the comparison runs.}
 \label{tab:feature_selection_counts}
 \resizebox{\textwidth}{!}{
 \begin{tabular}{llcccc}
@@ -54,7 +54,7 @@ Table~\ref{tab:gse19804_probes} reports the retained-gene counts for each method
 
 \begin{table}[H]
 \centering
-\caption{Uncapped feature counts on GSE19804 under the $p \leq 0.05$ selection policy. The retained-feature counts in this chapter are computed on the full dataset as a standalone characterization of each method's behavior; the fold-local counts used inside the Chapter~5 cross-validation pipeline differ.}
+\caption{Feature counts on GSE19804 under the $p \leq 0.05$ selection policy. The retained-feature counts in this chapter are computed on the full dataset as a standalone characterization of each method's behavior; the fold-local counts used inside the Chapter~5 cross-validation pipeline differ.}
 \label{tab:gse19804_probes}
 \small
 \begin{tabular}{lcc}

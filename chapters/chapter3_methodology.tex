@@ -49,11 +49,11 @@ For each probe $j$, we computed the Welch $t$-statistic comparing cancer and nor
 
 where $\bar{x}_{c,j}$ and $\bar{x}_{n,j}$ denote the sample means in the cancer and normal groups, and $n_c$ and $n_n$ are the corresponding sample sizes. The resulting $p$-values were used to rank probes.
 
-\textbf{Selection rule:} The analysis uses uncapped significance selection. Probes are retained when $p \leq \alpha$ ($\alpha = 0.05$), and every probe passing the criterion is kept; no top-$k$ cap is applied. This preserves the full statistical evidence instead of forcing all methods into an arbitrary fixed-size panel.
+\textbf{Selection rule:} The analysis uses significance selection. Probes are retained when $p \leq \alpha$ ($\alpha = 0.05$), and every probe passing the criterion is kept.
 
 \subsubsection{ANOVA F-Test}
 
-The ANOVA F-test evaluates whether the between-group variance exceeds the within-group variance for each probe. Probes with larger F-scores and smaller associated $p$-values are treated as more discriminative. Under this policy, every probe with $p \leq 0.05$ is retained; the F-score is used for diagnostics rather than top-$k$ truncation.
+The ANOVA F-test evaluates whether the between-group variance exceeds the within-group variance for each probe. Probes with larger F-scores and smaller associated $p$-values are treated as more discriminative. Under this policy, every probe with $p \leq 0.05$ is retained; the F-score is used for diagnostics.
 
 \subsubsection{BH-FDR Ranked Filter}
 
@@ -65,7 +65,7 @@ The final filter variant used in the project implements a Benjamini-Hochberg (BH
     \item mutual information between probe expression and class label.
 \end{itemize}
 
-The combined ranking is the arithmetic mean of the three percentile ranks, and all BH survivors are retained in descending combined-rank order. This makes the FDR-ranked selector more conservative than the raw univariate filters: it requires statistical evidence after multiple-testing correction without imposing an additional top-$k$ truncation.
+The combined ranking is the arithmetic mean of the three percentile ranks, and all BH survivors are retained in descending combined-rank order. This makes the FDR-ranked selector more conservative than the raw univariate filters.
 
 \subsubsection{Within-Fold Resampling for Imbalanced Training}
 
@@ -83,13 +83,13 @@ This thresholding step was computed from the raw decision-function values rather
 
 \subsubsection{Inner-CV Tuning of $C$}
 
-The analysis does not tune or select a feature-count parameter $k$. Every feature passing the active $p$-value or BH-FDR rule is retained, so introducing a $k$ sweep would be inconsistent with the uncapped selection policy. The SVM regularization parameter $C$ remains tuned within each outer training fold using an inner stratified cross-validation search over $\{0.01, 0.1, 1, 10, 100\}$, while comparing class-weight settings of either \texttt{None} or \texttt{"balanced"}. The held-out outer fold is never used to choose $C$.
+Every feature passing the active $p$-value or BH-FDR rule is retained. The SVM regularization parameter $C$ remains tuned within each outer training fold using an inner stratified cross-validation search over $\{0.01, 0.1, 1, 10, 100\}$, while comparing class-weight settings of either \texttt{None} or \texttt{"balanced"}. The held-out outer fold is never used to choose $C$.
 
 \subsection{Wrapper Methods}
 
 \subsubsection{SVM-RFE and Random-Forest Importance}
 
-Wrapper methods were implemented with an ANOVA-based significance prefiltering step. In each training fold, the pipeline computes ANOVA statistics and retains every candidate satisfying the active p-value threshold before the wrapper model is fit. SVM-RFE then iteratively eliminates the lowest absolute-coefficient features until the retained set reaches the sample count of the fitting data, a data-dependent bound ($n_{\mathrm{features}} \approx n_{\mathrm{samples}}$) that avoids an arbitrary fixed $k$. Note that this bound is evaluated against the dataset actually passed to the selector: the Chapter~4 feature-selection tables run this stopping rule once against the full dataset (120 samples for GSE19804, 121 for GSE42568), producing the 120/121-feature sets reported there as a standalone characterization of each method. The Chapter~5 classifier evaluation instead fits the same selector inside each cross-validation training fold (approximately 80\% of the data), so the retained feature count there varies fold-to-fold and is smaller than the Chapter~4 figures; the two chapters are not reporting the same selection run. Random Forest importance retains only candidates whose impurity importance exceeds the mean importance; if the mean threshold is empty, the maximum-importance feature is retained.
+Wrapper methods were implemented with an ANOVA-based significance prefiltering step. In each training fold, the pipeline computes ANOVA statistics and retains every candidate satisfying the active p-value threshold before the wrapper model is fit. SVM-RFE then iteratively eliminates the lowest absolute-coefficient features until the retained set reaches the sample count of the fitting data, a data-dependent bound ($n_{\mathrm{features}} \approx n_{\mathrm{samples}}$). Note that this bound is evaluated against the dataset actually passed to the selector: the Chapter~4 feature-selection tables run this stopping rule once against the full dataset (120 samples for GSE19804, 121 for GSE42568), producing the 120/121-feature sets reported there as a standalone characterization of each method. The Chapter~5 classifier evaluation instead fits the same selector inside each cross-validation training fold (approximately 80\% of the data), so the retained feature count there varies fold-to-fold and is smaller than the Chapter~4 figures; the two chapters are not reporting the same selection run. Random Forest importance retains only candidates whose impurity importance exceeds the mean importance; if the mean threshold is empty, the maximum-importance feature is retained.
 
 The retained candidate set is then passed to either:
 \begin{itemize}
@@ -99,7 +99,7 @@ The retained candidate set is then passed to either:
 
 \subsubsection{XGBoost Gain Importance}
 
-A third wrapper method uses a gradient-boosted tree ensemble (XGBoost) to rank features by their cumulative gain contribution. The same ANOVA pre-filter described above first narrows the candidate set to probes satisfying $p \leq 0.05$. An XGBClassifier with the \texttt{gbtree} booster is then trained on the pre-filtered features using gain-based importance scoring. Features whose gain importance exceeds the mean importance across all retained features are kept; the remainder are discarded. This produces a compact, data-driven subset that is typically smaller than both the SVM-RFE and Random Forest wrappers (46 features on GSE19804, 61 on GSE42568). The XGBoost wrapper is particularly effective at identifying nonlinear discriminative features that linear methods may underweight.
+A third wrapper method uses a gradient-boosted tree ensemble (XGBoost) to rank features by their cumulative gain contribution. The same ANOVA pre-filter described above first narrows the candidate set to probes satisfying $p \leq 0.05$. An XGBClassifier with the \texttt{gbtree} booster is then trained on the pre-filtered features using gain-based importance scoring. Features whose gain importance exceeds the mean importance across all retained features are kept; the remainder are discarded. This produces a compact, data-driven subset that is typically smaller than both the SVM-RFE and Random Forest wrappers (46 features on GSE19804, 61 on GSE42568). The XGBoost wrapper is particularly effective at identifying nonlinear discriminative features that linear methods may not detect.
 
 The active wrapper implementations are SVM-RFE, Random Forest importance, and XGBoost gain importance; all three operate on the fold-local ANOVA-qualified candidate pool and apply their own algorithmic stopping rules.
 
@@ -107,7 +107,7 @@ The active wrapper implementations are SVM-RFE, Random Forest importance, and XG
 
 \subsubsection{LASSO (L1-Regularized Logistic Regression)}
 
-The embedded selector uses L1-regularized logistic regression. The model minimizes a penalized logistic-loss objective, and the regularization strength is selected by cross-validated logistic regression over an expanded grid of inverse-regularization values $C$ from $10^{-4}$ to $10^{1}$; smaller values of $C$ imply stronger regularization. The retained features are exactly those with nonzero fitted coefficients. If the selected $C$ produces an all-zero or all-nonzero solution, the implementation selects the sparsest non-degenerate candidate from the grid and records that fallback; it never replaces the result with the ANOVA candidate set.
+The embedded selector uses L1-regularized logistic regression. The model minimizes a penalized logistic-loss objective, and the regularization strength is selected by cross-validated logistic regression over an expanded grid of inverse-regularization values $C$ from $10^{-4}$ to $10^{1}$; smaller values of $C$ imply stronger regularization. The retained features are exactly those with nonzero fitted coefficients. If the selected $C$ produces an all-zero or all-nonzero solution, the implementation selects the sparsest non-degenerate candidate from the grid and records that fallback.
 
 \section{Evaluation Metrics}
 
