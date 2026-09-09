@@ -17,12 +17,12 @@ By placing the \texttt{FeatureSelector} inside the cross-validation pipeline, fe
 Each pipeline is scored on five folds and reported as mean $\pm$ standard deviation. Because the two datasets differ substantially in class balance, no single metric is sufficient on its own, so the following complementary measures are reported together:
 
 \begin{itemize}
-    \item \textbf{Accuracy} -- the overall proportion of correctly classified samples. On imbalanced data this metric can be misleadingly high if the classifier simply predicts the majority class.
-    \item \textbf{Precision and Recall (Sensitivity)} -- precision is the proportion of predicted-positive samples that are true positives; recall (equivalently, sensitivity) is the proportion of true positives that are correctly identified.
-    \item \textbf{Specificity} -- the proportion of true negatives correctly identified. This is the metric most sensitive to majority-class collapse, since a classifier that always predicts the positive class scores $0\%$ specificity regardless of its accuracy.
-    \item \textbf{F1-Score} -- the harmonic mean of precision and recall, useful when the cost of false positives and false negatives is similar.
-    \item \textbf{Matthews Correlation Coefficient (MCC)} -- a single balanced measure computed from all four confusion-matrix cells, ranging from $-1$ (total disagreement) through $0$ (random / majority-class guessing) to $+1$ (perfect prediction). MCC is regarded as the most reliable single indicator of classifier quality under class imbalance and is treated as the primary decision metric in this chapter whenever it conflicts with accuracy.
-    \item \textbf{ROC-AUC} -- the area under the receiver operating characteristic curve, summarising the trade-off between sensitivity and the false-positive rate independently of the classification threshold.
+    \item \textbf{Accuracy} : the overall proportion of correctly classified samples. On imbalanced data this metric can be misleadingly high if the classifier simply predicts the majority class.
+    \item \textbf{Precision and Recall (Sensitivity)} : precision is the proportion of predicted-positive samples that are true positives; recall (equivalently, sensitivity) is the proportion of true positives that are correctly identified.
+    \item \textbf{Specificity} : the proportion of true negatives correctly identified. This is the metric most sensitive to majority-class collapse, since a classifier that always predicts the positive class scores $0\%$ specificity regardless of its accuracy.
+    \item \textbf{F1-Score} : the harmonic mean of precision and recall, useful when the cost of false positives and false negatives is similar.
+    \item \textbf{Matthews Correlation Coefficient (MCC)} : a single balanced measure computed from all four confusion-matrix cells, ranging from $-1$ (total disagreement) through $0$ (random / majority-class guessing) to $+1$ (perfect prediction). MCC is regarded as the most reliable single indicator of classifier quality under class imbalance and is treated as the primary decision metric in this chapter whenever it conflicts with accuracy.
+    \item \textbf{ROC-AUC} : the area under the receiver operating characteristic curve, summarising the trade-off between sensitivity and the false-positive rate independently of the classification threshold.
 \end{itemize}
 
 \section{Imbalanced-Data Extensions and Model Tuning}
@@ -193,7 +193,7 @@ Taken together, the BH-FDR selector is the strongest Path B variant on GSE42568 
 
 The empirical evaluation leads to four major findings:
 \begin{enumerate}
-    \item \textbf{On Balanced Datasets (GSE19804):} All Path B methods match the Path A classifier at Accuracy $=95.00\%$ and MCC $=0.9013$; their ROC-AUC values differ only slightly ($0.9792$--$0.9806$). However, \textbf{XGBoost Importance} as a feature selector outperforms all other configurations, reaching $97.5\%$ Accuracy and $0.9530$ MCC.
+    \item \textbf{On Balanced Datasets (GSE19804):} All Path B methods match the Path A classifier at Accuracy $=95.00\%$ and MCC $=0.9013$; their ROC-AUC values differ only slightly ($0.9792$:$0.9806$). However, \textbf{XGBoost Importance} as a feature selector outperforms all other configurations, reaching $97.5\%$ Accuracy and $0.9530$ MCC.
     \item \textbf{On Imbalanced Datasets (GSE42568):} The Welch, ANOVA, wrapper, and LASSO paths all have Specificity near $0\%$ and negative or zero MCC. The two-gene BH-FDR path is strongest by MCC ($+0.0269$), but remains close to chance.
     \item \textbf{Selection-policy effect:} Larger nominally significant gene sets collapse toward majority-class prediction, while strict BH-FDR filtering retains only two genes and provides the best Path B balance. the tree-based wrapper approach which is the XGBoost, show signs of mitigating this collapse but still struggle against the severe class imbalance.
     \item \textbf{Leakage Prevention:} Embedding feature selection strictly within cross-validation folds via scikit-learn \texttt{Pipeline} ensures rigorous, unbiased validation of high-dimensional genomic classifiers, and is what allows the majority-class collapse on GSE42568 to be detected in the first place, had feature selection been performed on the full dataset before splitting, the resulting optimistic bias could have masked this failure mode.
