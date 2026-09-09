@@ -49,11 +49,11 @@ For each probe $j$, we computed the Welch $t$-statistic comparing cancer and nor
 
 where $\bar{x}_{c,j}$ and $\bar{x}_{n,j}$ denote the sample means in the cancer and normal groups, and $n_c$ and $n_n$ are the corresponding sample sizes. The resulting $p$-values were used to rank probes.
 
-\textbf{Selection rule:} The regenerated analysis uses uncapped significance selection. Probes are retained when $p \leq \alpha$ ($\alpha = 0.05$), and every probe passing the criterion is kept; no top-$k$ cap is applied. This preserves the full statistical evidence instead of forcing all methods into an arbitrary fixed-size panel.
+\textbf{Selection rule:} The analysis uses uncapped significance selection. Probes are retained when $p \leq \alpha$ ($\alpha = 0.05$), and every probe passing the criterion is kept; no top-$k$ cap is applied. This preserves the full statistical evidence instead of forcing all methods into an arbitrary fixed-size panel.
 
 \subsubsection{ANOVA F-Test}
 
-The ANOVA F-test evaluates whether the between-group variance exceeds the within-group variance for each probe. Probes with larger F-scores and smaller associated $p$-values are treated as more discriminative. Under the regenerated policy, every probe with $p \leq 0.05$ is retained; the F-score is used for diagnostics rather than top-$k$ truncation.
+The ANOVA F-test evaluates whether the between-group variance exceeds the within-group variance for each probe. Probes with larger F-scores and smaller associated $p$-values are treated as more discriminative. Under this policy, every probe with $p \leq 0.05$ is retained; the F-score is used for diagnostics rather than top-$k$ truncation.
 
 \subsubsection{BH-FDR Ranked Filter}
 
@@ -83,7 +83,7 @@ This thresholding step was computed from the raw decision-function values rather
 
 \subsubsection{Inner-CV Tuning of $C$}
 
-The regenerated analysis does not tune or select a feature-count parameter $k$. Every feature passing the active $p$-value or BH-FDR rule is retained, so introducing a $k$ sweep would contradict the uncapped selection policy. The SVM regularization parameter $C$ remains tuned within each outer training fold using an inner stratified cross-validation search over $\{0.01, 0.1, 1, 10, 100\}$, while comparing class-weight settings of either \texttt{None} or \texttt{"balanced"}. The held-out outer fold is never used to choose $C$.
+The analysis does not tune or select a feature-count parameter $k$. Every feature passing the active $p$-value or BH-FDR rule is retained, so introducing a $k$ sweep would be inconsistent with the uncapped selection policy. The SVM regularization parameter $C$ remains tuned within each outer training fold using an inner stratified cross-validation search over $\{0.01, 0.1, 1, 10, 100\}$, while comparing class-weight settings of either \texttt{None} or \texttt{"balanced"}. The held-out outer fold is never used to choose $C$.
 
 \subsection{Wrapper Methods}
 
@@ -119,4 +119,4 @@ A 5-fold stratified cross-validation strategy was used throughout the study. Thi
 
 \section{Comparative Analysis of Selected Feature Sets}
 
-The project compares feature sets primarily by predictive performance and retained-feature counts. Because the uncapped policy can retain a large number of probes, the generated summary files store the complete selected feature lists for each method and dataset; no fixed top-$k$ overlap or compact-panel claim is made.
+The project compares feature sets primarily by predictive performance and retained-feature counts.
