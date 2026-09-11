@@ -5,10 +5,13 @@
 \onehalfspacing
 
 % Header and footer
+\iffalse
 \pagestyle{fancy}
 \fancyhf{}
 \rhead{\thepage}
-\lhead{\leftmark}
+\lhea
+{\leftmark}
+\fi
 
 % Title page setup
 \title{EFFECT OF FEATURE SELECTION ON CLASSIFICATION ACCURACY ON HIGH-DIMENSIONAL GENE EXPRESSION DATA}
@@ -69,6 +72,8 @@
 \end{center}
 \end{titlepage}
 
+%\frontmatter
+\pagenumbering{roman}
 
 % ============================================================
 % DECLARATION & DEDICATION
@@ -96,9 +101,21 @@
 \tableofcontents
 \newpage
 
+\listoffigures
+\newpage
+
+\listoftables
+\newpage
+
 % ============================================================
 % CHAPTERS
 % ============================================================
+%\mainmatter
+
+\clearpage
+\pagenumbering{arabic}
+\setcounter{page}{1}
+
 \input{chapters/chapter1_introduction}
 \newpage
 
@@ -114,6 +131,7 @@
 \input{chapters/chapter5_svm_evaluation}
 \newpage
 
+%\backmatter
 %REFERENCES
 %\renewcommand{\bibname}{REFERENCES}
 \bibliographystyle{abbrvnat}
