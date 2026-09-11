@@ -182,7 +182,13 @@ class GenomicDataProcessor:
             index=self.X_log.index,
             columns=self.X_log.columns,
         )
-        self.X_log = None  # free memory
+        # NOTE: self.X_log is intentionally NOT freed here (unlike the
+        # original implementation). svm_classifier.py needs the
+        # pre-standardization log-stage matrix (via save_log_stage_data /
+        # load_log_stage_data) so it can fit StandardScaler fold-locally
+        # instead of using this full-dataset-fit version. Callers that only
+        # need X_scaled and want to free memory can del processor.X_log
+        # themselves once save_log_stage_data() has been called.
         return self.X_scaled
 
     def preprocess_complete(self) -> tuple[pd.DataFrame, np.ndarray]:
@@ -273,6 +279,17 @@ class GenomicDataProcessor:
         Load the .npy cache written by save_preprocessed_data().
 
         Raises FileNotFoundError if any of the four expected files are missing.
+
+        NOTE: this returns the FULL-DATASET standardized matrix (fit on all
+        samples). It is appropriate for full-dataset, descriptive
+        characterization (e.g. feature_selection.py standalone mode / the
+        Chapter 4 method-comparison tables), which does not evaluate
+        held-out predictive performance. It is NOT appropriate as the
+        direct input to a cross-validated classifier, because the scaler
+        was fit using every sample, including whichever ones later become
+        the held-out test fold. For that use case, call
+        load_log_stage_data() instead and fit StandardScaler fold-locally
+        (see svm_classifier.py, which does exactly this).
         """
         logger.info(f"Loading preprocessed cache for {self.dataset_name} …")
 
@@ -297,6 +314,66 @@ class GenomicDataProcessor:
 
         logger.info(f"Cache loaded: {self.X_scaled.shape}")
         return self.X_scaled, self.y
+
+    # ------------------------------------------------------------------
+    # Persistence — LOG-STAGE cache (pre-scaling; used by svm_classifier.py
+    # for cross-validated evaluation, so that standardization can be fit
+    # fold-locally instead of on the full dataset)
+    # ------------------------------------------------------------------
+    def save_log_stage_data(self) -> None:
+        """
+        Serialise the log-transformed (NOT yet standardized) matrix to
+        preprocessed_datasets/<dataset_name>/<dataset_name>_X_log.npy,
+        alongside the y/genes/samples arrays already written by
+        save_preprocessed_data(). This is the correct input for any
+        pipeline that must fit StandardScaler fold-locally.
+        """
+        if self.X_log is None:
+            raise ValueError(
+                "No log-stage data to save. Call apply_log_transformation() "
+                "and save before apply_standardization() frees self.X_log."
+            )
+
+        logger.info(f"Saving log-stage cache for {self.dataset_name} …")
+
+        out_dir = self.preprocessed_dir / self.dataset_name
+        out_dir.mkdir(parents=True, exist_ok=True)
+
+        np.save(out_dir / f"{self.dataset_name}_X_log.npy", self.X_log.values)
+        np.save(out_dir / f"{self.dataset_name}_y.npy", self.y)
+        np.save(out_dir / f"{self.dataset_name}_genes.npy", self.X_log.columns.values)
+        np.save(out_dir / f"{self.dataset_name}_samples.npy", self.X_log.index.values)
+
+        logger.info(f"Log-stage cache saved to: {out_dir}")
+
+    def load_log_stage_data(self) -> tuple[pd.DataFrame, np.ndarray]:
+        """
+        Load the log-stage (pre-standardization) cache written by
+        save_log_stage_data(). Raises FileNotFoundError if missing.
+        """
+        logger.info(f"Loading log-stage cache for {self.dataset_name} …")
+
+        cache_dir = self.preprocessed_dir / self.dataset_name
+        X_path     = cache_dir / f"{self.dataset_name}_X_log.npy"
+        y_path     = cache_dir / f"{self.dataset_name}_y.npy"
+        cols_path  = cache_dir / f"{self.dataset_name}_genes.npy"
+        index_path = cache_dir / f"{self.dataset_name}_samples.npy"
+
+        missing = [p for p in (X_path, y_path, cols_path, index_path) if not p.exists()]
+        if missing:
+            raise FileNotFoundError(
+                f"Log-stage cache incomplete — missing file(s): {[str(m) for m in missing]}"
+            )
+
+        y = np.load(y_path)
+        X_log = pd.DataFrame(
+            np.load(X_path),
+            index=np.load(index_path, allow_pickle=True),
+            columns=np.load(cols_path, allow_pickle=True),
+        )
+
+        logger.info(f"Log-stage cache loaded: {X_log.shape}")
+        return X_log, y
 
     # ------------------------------------------------------------------
     # Persistence — CSV export (used by feature_selection standalone mode)
@@ -341,7 +418,26 @@ if __name__ == "__main__":
     dataset_name = sys.argv[1] if len(sys.argv) > 1 else "GSE19804"
 
     processor = GenomicDataProcessor(dataset_name=dataset_name)
-    X, y = processor.preprocess_complete()
+
+    # Run stages manually (rather than via preprocess_complete()) so each
+    # intermediate stage can be profiled before it is freed from memory.
+    # The "raw" profile in particular answers the thesis Chapter 3 question
+    # of whether the downloaded GEO matrix is already on a log scale: if
+    # these raw values are already confined to a small range (e.g. ~0-16),
+    # log2(x+1) is not appropriate and should be skipped.
+    processor.load_data()
+    processor.profile_data("raw")
+
+    processor.apply_log_transformation()
+    processor.profile_data("log")
+
+    processor.apply_standardization()
     processor.profile_data("scaled")
+
+    # Full-dataset-standardized cache: used for descriptive, non-CV
+    # characterization (e.g. feature_selection.py standalone mode).
     processor.save_preprocessed_data()
     processor.export_csv()
+    # Log-stage (pre-standardization) cache: used by svm_classifier.py so
+    # that StandardScaler can be fit fold-locally during cross-validation.
+    processor.save_log_stage_data()
