@@ -3,16 +3,13 @@
 \section{Background}
 
 The rapid development of high-throughput technologies has made it possible to measure the expression levels of thousands of genes simultaneously. Gene expression data provide quantitative information about the activity of genes within biological samples and have become an important source of information for studying diseases and distinguishing between different biological conditions. In cancer research, for example, patterns in gene expression can be used to distinguish tumour samples from normal tissue and to identify molecular characteristics associated with different diseases. The availability of such large-scale molecular datasets has consequently created opportunities for the application of statistical and machine learning methods to classification problems.
-
-<<<<<<< HEAD
 Gene expression data, however, present a distinctive statistical and computational challenge. A typical dataset may contain measurements for tens of thousands of molecular features while having only a relatively small number of observations. Thus, the number of features can be considerably larger than the number of available samples. This setting is commonly referred to as high-dimensional data and is often characterized by the ``small $n$, large $p$'' problem, where $n$ denotes the number of observations and $p$ denotes the number of features. When $p$ is much larger than $n$, conventional classification procedures may become computationally demanding and may be more susceptible to overfitting. The presence of many irrelevant or redundant features can also make it difficult for a learning algorithm to identify the variables that contain useful information for distinguishing between classes.
 
 The problem is particularly relevant to gene expression classification because the number of measured molecular variables can be extremely large compared with the number of biological samples. In such situations, a classifier may have sufficient flexibility to fit patterns that are specific to the available training observations rather than patterns that generalize to unseen observations. High dimensionality can therefore affect both the statistical reliability of a model and its computational cost. The selection of a smaller and more informative set of features provides one approach for addressing these difficulties.
-=======
 Gene expression refers to the process by which genetic information encoded in DNA is transcribed into RNA, ultimately influencing protein production and cellular function. In disease studies, gene expression profiling is widely used to identify molecular differences between healthy and diseased samples. High-throughput technologies for measuring gene expression fall broadly into two families: microarrays, which use probes designed against known transcripts, and RNA sequencing (RNA-seq), which sequences transcripts directly (\cite{venkatesh2019review}). Both technologies produce large-scale, high-dimensional expression matrices, and the general challenges of high dimensionality discussed in this chapter apply to either. The present study uses microarray data specifically: the two datasets analysed (Chapter~3) were profiled on the Affymetrix platform and are organised by probe rather than by uniquely mapped gene, so probe-to-gene annotation status is stated explicitly where relevant.
 
 A typical gene expression dataset consists of thousands of genes or probes (features) and a very small number of samples. This imbalance creates what is commonly known as the ``high-dimensional, low-sample-size'' problem (\cite{venkatesh2019review,kumar2014feature}). In such settings, machine learning algorithms often struggle to generalize effectively due to overfitting and the curse of dimensionality (\cite{li2017feature}). Consequently, dimensionality reduction techniques, and feature selection in particular, are widely used to improve model performance and interpretability (\cite{tang2013feature,li2017feature}). Feature selection is one form of dimensionality reduction: it retains a subset of the original variables, in contrast to transformation-based approaches such as Principal Component Analysis (PCA), which construct new variables from combinations of the originals. This study evaluates feature selection methods only; transformation-based dimensionality reduction is not tested and the two terms are not used interchangeably in what follows.
->>>>>>> 2e570f52c68058046e1b5fefd6de9cd865022a1e
+
 
 Feature selection is the process of identifying a subset of the original features that is considered useful for a particular learning task. Unlike methods that transform the original variables into a new set of variables, feature selection retains a subset of the original features. This distinction is important because the selected features remain directly interpretable in terms of the original dataset. Feature selection has been widely studied as a preprocessing and model-development technique for high-dimensional classification problems, with different approaches based on statistical properties, learning algorithms, or the training process itself \citep{venkatesh2019review,tang2013feature,li2017feature,kumar2014feature}.
 
@@ -22,18 +19,15 @@ Feature selection methods are commonly categorized into filter, wrapper, and emb
 
 In gene expression analysis, statistical filtering methods can be used to identify features that exhibit differences between classes. For example, the two-sample $t$-test can be used to assess whether the mean expression of a feature differs between two groups, while analysis of variance (ANOVA) can be used to measure the extent to which feature values vary between classes. Such methods can be computationally efficient because each feature can be evaluated independently. However, because thousands of features may be tested simultaneously, statistical significance must be interpreted carefully. In particular, the use of an uncorrected significance level across a very large number of features can result in a substantial number of false discoveries. Multiple-testing procedures such as the Benjamini-Hochberg false discovery rate procedure provide one approach for controlling the expected proportion of false discoveries among the selected features.
 
-<<<<<<< HEAD
+
 Wrapper methods provide a different approach by considering the relationship between feature subsets and the performance of a learning algorithm. Recursive Feature Elimination (RFE), for instance, repeatedly fits a model, ranks the features according to their contribution to the model, removes less important features, and continues the process until a specified subset is obtained. The use of Support Vector Machines (SVMs) for gene selection illustrates how a classification model can be incorporated directly into the feature-selection procedure. Guyon et al. \citep{guyon_gene_2002} demonstrated the application of SVM-based feature selection to cancer classification, highlighting the usefulness of selecting informative genes in high-dimensional classification settings. Although wrapper approaches can account for interactions between features through the learning algorithm, they may require substantially more computation than methods that evaluate each feature independently.
-=======
+
 The \textit{Curse of Dimensionality}: With too many features, distances between data points become meaningless, and models can find ``patterns'' in pure noise, leading to overfitting (\cite{venkatesh2019review}).
->>>>>>> 2e570f52c68058046e1b5fefd6de9cd865022a1e
 
 Embedded methods incorporate feature selection into the process of model fitting. LASSO, for example, introduces an $L_1$ penalty that encourages some model coefficients to become exactly zero. The resulting sparsity can be used to identify a subset of informative variables. Tree-based learning algorithms can also provide measures of feature importance that can be used to identify variables that contribute strongly to a fitted model. These approaches provide a direct connection between feature selection and model construction, although the features selected may depend strongly on the characteristics of the particular learning algorithm.
 
-<<<<<<< HEAD
 The mathematical formulation of feature selection can be viewed as a subset selection problem. Let the data matrix be represented by
 
-=======
 Machine learning models trained on high-dimensional data commonly suffer from the following issues (\cite{venkatesh2019review,kumar2014feature}):
 \begin{itemize}
     \item \textbf{Overfitting:} The model memorizes noise instead of learning genuine patterns.
@@ -85,7 +79,7 @@ RFE captures inter-gene dependencies but is computationally expensive, since the
 In embedded methods, feature selection occurs as an intrinsic part of a single model-fitting process rather than through repeated external refitting of candidate subsets: the model itself produces an importance measure, or a sparsity-inducing penalty, as a by-product of training. Common examples include LASSO, Random Forest feature importance, and gradient-boosted-tree importance.
 
 \paragraph{L1 Regularization (LASSO).} LASSO (Least Absolute Shrinkage and Selection Operator) is the industry standard for embedded feature selection:
->>>>>>> 2e570f52c68058046e1b5fefd6de9cd865022a1e
+
 \begin{equation}
 X \in \mathbb{R}^{n \times p},
 \end{equation}
@@ -130,53 +124,36 @@ Ultimately, the study seeks to provide a mathematical and computational assessme
 
 \section{Problem Statement}
 
-<<<<<<< HEAD
 High-dimensional gene expression datasets contain a large number of measured features relative to the number of available samples. This ``small $n$, large $p$'' structure presents challenges for classification because many of the available features may be irrelevant or redundant, while the limited number of observations makes it difficult to estimate complex relationships reliably. As a result, classification models may experience overfitting, increased computational cost, and reduced generalization when trained using the complete feature space.
 
 Feature selection provides a possible approach for addressing these challenges by identifying a smaller subset of informative features. However, different feature-selection techniques use different criteria for determining which features are retained. Consequently, they may produce subsets of substantially different sizes and may have different effects on classification performance. Feature selection may improve, maintain, or reduce predictive performance depending on the characteristics of the dataset and the method employed.
 
 This creates a need to empirically investigate the effect of different feature-selection techniques on high-dimensional gene expression classification. In particular, it is necessary to determine whether feature selection consistently improves classification performance across datasets, whether different selection methods produce different outcomes, and how the dimensionality of the resulting feature subsets relates to classification performance.
-=======
+
 Gene expression microarray datasets contain thousands of probes but relatively few samples. This high dimensionality can negatively affect classification performance by increasing model variance, promoting overfitting, introducing noise from irrelevant or redundant features, and reducing generalization in classification tasks. While feature selection is commonly used to address this issue, it is not always clear which feature selection techniques most effectively improve classification performance on high-dimensional gene expression data, nor whether their effect is consistent across datasets with different characteristics such as class balance.
->>>>>>> 2e570f52c68058046e1b5fefd6de9cd865022a1e
+
 
 \section{Aim and Objectives}
 
 \subsection{Aim}
 
-<<<<<<< HEAD
-The aim of this study is to investigate the effect of different feature-selection techniques on the classification performance of high-dimensional human gene expression data.
+
+The aim of this study is to investigate the effect of different feature-selection techniques on the classification performance of high-dimensional human gene expression microarray data.
 
 \subsection{Objectives}
 
 The specific objectives of the study are to:
 
 \begin{enumerate}
-\item examine the characteristics of high-dimensional human gene expression datasets used for classification;
+\item To examine the structure and characteristics of high-dimensional human gene expression datasets used for classification.
 
-```
-\item implement selected filter, wrapper, and model-based feature-selection techniques for identifying informative features;
+\item To implement selected filter, wrapper, and model-based feature-selection techniques for identifying informative features.
 
-\item apply the selected feature subsets to an XGBoost classification model;
+\item To train machine learning classification models using features selected by each method.
 
-\item evaluate and compare the classification performance obtained using the different feature-selection techniques;
+\item To investigate the relationship between the number of selected features and classification performance across the datasets.
 
-\item investigate the relationship between the number of selected features and classification performance across the datasets; and
+\item To assess whether the effect of feature selection is consistent across datasets with different characteristics.
 
-\item assess whether the effect of feature selection is consistent across datasets with different characteristics.
-```
 
 \end{enumerate}
-=======
-The aim of this study is to investigate the effect of different feature selection techniques on classification performance in high-dimensional gene expression microarray datasets.
-
-\subsection{Objectives}
-
-\begin{itemize}
-    \item To analyze the structure and characteristics of high-dimensional microarray gene expression data.
-    \item To implement various feature selection methods, including filter, wrapper, and embedded approaches.
-    \item To train machine learning classification models using features selected by each method.
-    \item To evaluate and compare classification performance using appropriate metrics.
-    \item To examine how feature selection affects model generalization, including cases where it maintains, improves, or reduces performance relative to the full-feature baseline.
-\end{itemize}
->>>>>>> 2e570f52c68058046e1b5fefd6de9cd865022a1e
