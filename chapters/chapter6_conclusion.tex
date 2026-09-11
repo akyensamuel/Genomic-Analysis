@@ -1,0 +1,30 @@
+\chapter{CONCLUSION AND RECOMMENDATIONS}
+
+\section{Summary of Findings}
+
+This study investigated the effect of filter, wrapper, and embedded feature selection methods on the classification performance of a linear SVM applied to two high-dimensional gene-expression microarray datasets: GSE19804 (class-balanced lung cancer) and GSE42568 (severely imbalanced breast cancer). Returning to the aim stated in Chapter~1, the evidence does not support a single, universal effect of feature selection on classification performance; instead, the effect was found to be method- and dataset-dependent.
+
+On GSE19804, most feature-selection methods matched the full-feature baseline (95.00\% accuracy, MCC $=0.9013$), XGBoost importance achieved the highest mean performance (97.50\% accuracy, MCC $=0.9530$), and SVM-RFE was the only method that reduced performance relative to the baseline (92.50\% accuracy, MCC $=0.8554$). On GSE42568, no evaluated method---filter, wrapper, or embedded---produced a classifier with both acceptable sensitivity and specificity; most configurations collapsed to predicting the majority class, and even the best-performing configuration (BH-FDR-ranked selection retaining two probes) achieved a mean MCC of only $0.0269$, close to chance and with very high variance across folds. This negative result for GSE42568 is treated in this thesis as a substantive finding in its own right, rather than as a failure to be minimised: it demonstrates that severe class imbalance combined with a very small minority class (17 samples) can prevent reliable classification even after aggressive dimensionality reduction, and that feature selection alone is not a solution to this problem.
+
+Revisiting the objectives set out in Chapter~1:
+\begin{itemize}
+    \item The structure and characteristics of the high-dimensional microarray data used in this study were analysed in Chapters~3 and~4, including the $p \gg n$ regime, probe-versus-gene distinctions, and the differing class-balance profiles of the two datasets.
+    \item Filter, wrapper, and embedded feature-selection methods were implemented, with a consistent taxonomy applied throughout (SVM-RFE as the sole wrapper method; RF importance, XGBoost importance, and LASSO as embedded methods).
+    \item Classification models were trained using the probes selected by each method, with all data-dependent steps fitted strictly within cross-validation training folds.
+    \item Classification performance was evaluated and compared using accuracy, precision, recall, specificity, F1-score, MCC, and ROC-AUC, with MCC treated as the primary metric under class imbalance.
+    \item The effect of feature selection on model generalization was found to be mixed rather than uniformly positive: it maintained performance for most methods on GSE19804, improved it for XGBoost importance, reduced it for SVM-RFE, and failed to resolve the underlying difficulty on GSE42568 for any method tested.
+\end{itemize}
+
+\section{Recommendations and Future Work}
+
+The following directions would strengthen or extend the findings of this study:
+
+\begin{itemize}
+    \item \textbf{Larger and additional datasets.} Validating the observed patterns on additional GEO series, and particularly on datasets with a larger minority class than GSE42568's 17 normal samples, would help establish whether the imbalanced-dataset findings generalise beyond this specific dataset and cancer type.
+    \item \textbf{Repeated cross-validation.} Given the high variance in specificity and MCC observed on GSE42568 (Chapter~3), repeated stratified $k$-fold cross-validation (multiple random splits, averaged) would provide more stable performance estimates than a single 5-fold run, if computationally feasible.
+    \item \textbf{Fixed-budget comparison of selectors.} Because the methods compared in this study retain very different numbers of probes (from 2 to over 25,000), an additional experiment comparing methods at matched feature-set sizes (e.g., top 10, 50, 100, and 500 probes per method) would separate the effect of the selection criterion from the effect of the number of retained features.
+    \item \textbf{Feature-selection stability.} With $p \gg n$, different training folds can select substantially different probes while achieving similar accuracy. Reporting how often the same probes are selected across folds (a stability or Jaccard-overlap analysis) would indicate whether the selected features are a reliable signal or one of many equally predictive but distinct subsets.
+    \item \textbf{Biological annotation of selected probes.} Mapping the retained probe sets (particularly the compact XGBoost and BH-FDR sets) to gene symbols and known pathways was outside the scope of this study but would help assess the biological plausibility of the selected features and connect the computational results to the underlying biology.
+    \item \textbf{External validation.} Testing the selectors and classifiers trained on one dataset against an independent external dataset of the same cancer type would give a stronger test of generalization than cross-validation within a single series.
+    \item \textbf{Extending the imbalance interventions.} The SMOTE, threshold-tuning, and classifier-substitution experiments in Chapter~5 were evaluated only on the Welch $t$-test path; repeating them for the other six feature-selection methods would clarify whether any combination of intervention and selector can improve minority-class performance on GSE42568.
+\end{itemize}
