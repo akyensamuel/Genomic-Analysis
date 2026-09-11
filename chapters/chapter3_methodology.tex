@@ -2,17 +2,30 @@
 
 \section{Dataset Description}
 
-The analysis used the two GEO datasets registered in the preprocessing pipeline: GSE19804 and GSE42568. The primary feature-selection workflow was carried out on GSE19804, a balanced lung-cancer dataset, while GSE42568 was retained as a secondary benchmark for the SVM evaluation chapter. Both datasets contain the same high-dimensional structure characteristic of microarray studies:
+Two publicly available gene-expression microarray datasets were obtained from the NCBI Gene Expression Omnibus (GEO) and used throughout this study. Both datasets were profiled on the same microarray platform, which allows feature-selection behaviour to be compared across two class-balance regimes without the platform itself being a confound.
 
-\begin{itemize}
-    \item \textbf{GSE19804:} 120 samples (60 cancer, 60 normal) and 54,675 probes.
-    \item \textbf{GSE42568:} 121 samples (104 cancer, 17 normal) and 54,675 probes.
-    \item \textbf{Data type:} bulk expression values from Affymetrix-style microarray experiments.
-\end{itemize}
+\subsection{GSE19804 (Lung Cancer)}
 
-The inclusion of both datasets makes it possible to study feature-selection behavior under different class-balance regimes while keeping the same preprocessing and modeling framework.
+GSE19804 comprises 120 samples: 60 non-small-cell lung cancer (NSCLC) tumour tissue samples and 60 paired adjacent normal lung tissue samples, giving a perfectly balanced (1:1) class distribution. Samples were profiled on the Affymetrix Human Genome U133 Plus 2.0 Array (GEO platform GPL570), which measures 54,675 probe sets. As recorded in the series' GEO metadata, the tumour and matched normal tissue in this series were obtained from the same non-smoking female patients, so the cancer and normal groups are paired (within-patient) rather than drawn from independent participants. This study used the complete set of 120 samples exactly as distributed in the series; no samples were excluded.
+
+\subsection{GSE42568 (Breast Cancer)}
+
+GSE42568 comprises 121 samples: 104 primary breast-cancer tissue samples and 17 non-tumour (normal) breast tissue samples, giving a severely imbalanced ($\approx$6:1) class distribution. Samples were also profiled on the Affymetrix Human Genome U133 Plus 2.0 Array (GPL570), again measuring 54,675 probe sets. Unlike GSE19804, the cancer and normal samples in this series are not necessarily matched pairs from the same patients; the normal samples represent an independently sampled comparison group. This study used the complete set of 121 samples exactly as distributed in the series; no samples were excluded.
+
+\subsection{Rationale for Dataset Selection}
+
+GSE19804 and GSE42568 were selected together because they let the study examine feature-selection behaviour under two contrasting conditions while holding the microarray platform (GPL570, 54,675 probes) and the overall preprocessing and evaluation pipeline fixed: GSE19804 is class-balanced, while GSE42568 is severely class-imbalanced. This provides a controlled test of whether the effect of feature selection observed on a balanced cancer dataset generalises to a setting with severe class imbalance. The two datasets do, however, differ in more than class balance: they concern different cancer types (lung versus breast), different tissue-sampling designs (matched-pair versus independently sampled normals), and different patient populations. Consequently, performance differences between the two datasets in Chapters~4 and~5 cannot be attributed to class imbalance alone, and this limitation is revisited in the discussion of results (Chapter~5).
+
+\subsection{Probe-to-Gene Annotation}
+
+Both datasets are indexed by the 54,675 Affymetrix probe sets of the GPL570 platform. No probe-to-gene annotation step was performed in this study: probe sets were not mapped to, or collapsed onto, unique gene symbols. A single gene can be measured by more than one probe set, and not every probe set maps uniquely to a single annotated gene. All feature counts reported in Chapters~4 and~5 (for example, ``25,695 retained'') therefore refer to probe sets, not to a corresponding number of unique genes, and are reported as such throughout this thesis rather than being described as gene counts.
+
+\subsection{Preprocessing Status of the Downloaded Data}
+
+\textbf{[To be completed with the exact GEO download details.]} State here precisely which GEO file was downloaded for each series (e.g., the submitter-supplied normalized series matrix, versus raw \texttt{.CEL} intensity files processed locally with RMA/MAS5), since GEO series matrices for Affymetrix experiments are frequently already background-corrected, normalized, and in some cases already on a logarithmic scale. Report the minimum, maximum, and mean of the expression matrix \emph{before} the $\log_2(x+1)$ transformation described in Section~\ref{sec:preprocessing} is applied: values already confined to a small range (for example, roughly 0--16) would indicate the data are already log-scale, in which case a further $\log_2$ transformation would not be appropriate and should be removed from the pipeline. This check has not yet been documented in the current draft and should be added before submission.
 
 \section{Data Preprocessing and Normalization}
+\label{sec:preprocessing}
 
 Raw gene-expression values are typically right-skewed and contain substantial measurement noise. We therefore applied a two-step preprocessing pipeline before any feature selection or classification step:
 
@@ -23,16 +36,16 @@ Each expression value $x$ was transformed as
     y = \log_2(x + 1).
 \end{equation}
 
-This stabilizes variance, reduces skewness, and makes the data more suitable for parametric statistical tests and linear models.
+This stabilizes variance, reduces skewness, and makes the data more suitable for parametric statistical tests and linear models. Whether this transformation is appropriate for the specific files downloaded from GEO is addressed above; it should not be applied if the downloaded values are already on a log scale.
 
 \subsection{Standardization (Z-score Normalization)}
 
-After the log transformation, each feature was standardized across samples:
+Each feature was standardized using
 \begin{equation}
     z = \frac{x - \mu}{\sigma},
 \end{equation}
 
-where $\mu$ and $\sigma$ denote the feature mean and standard deviation. Standardization is particularly important for regularized methods such as LASSO and for SVMs, because it prevents features with large absolute values from dominating the optimization objective.
+where $\mu$ and $\sigma$ denote the feature mean and standard deviation. Standardization is particularly important for regularized methods such as LASSO and for SVMs, because it prevents features with large absolute values from dominating the optimization objective. \textbf{Fold locality:} to avoid information leakage from the held-out fold into the training statistics, $\mu$ and $\sigma$ must be estimated only from the training-fold samples within each cross-validation split, and the resulting scaler then applied unchanged to the corresponding validation fold. The scaler is therefore placed inside the same \texttt{sklearn.pipeline.Pipeline} as the feature selector and the classifier (Section~\ref{sec:cv}), rather than being fit once on the full dataset before cross-validation. Any earlier version of the pipeline that standardized the full dataset before splitting into folds should be corrected to this fold-local form, and the corrected pipeline is what generates the results reported in Chapters~4 and~5.
 
 \section{Feature Selection Methods}
 
@@ -49,11 +62,11 @@ For each probe $j$, we computed the Welch $t$-statistic comparing cancer and nor
 
 where $\bar{x}_{c,j}$ and $\bar{x}_{n,j}$ denote the sample means in the cancer and normal groups, and $n_c$ and $n_n$ are the corresponding sample sizes. The resulting $p$-values were used to rank probes.
 
-\textbf{Selection rule:} The analysis uses significance selection. Probes are retained when $p \leq \alpha$ ($\alpha = 0.05$), and every probe passing the criterion is kept.
+\textbf{Selection rule:} The analysis uses significance selection. Probes are retained when $p \leq \alpha$ ($\alpha = 0.05$), and every probe passing the criterion is kept. This nominal $\alpha = 0.05$ threshold is \emph{not} corrected for multiple testing: with 54,675 probes tested simultaneously, a nominal $p \leq 0.05$ criterion is expected to yield thousands of false positives by chance alone. The raw Welch $t$-test and ANOVA filters are therefore included in this study as computationally cheap, intentionally uncorrected \emph{predictive} feature-selection baselines, and the probes they retain should not be interpreted as evidence of statistically significant biological differential expression. The BH-FDR filter described below is the multiple-testing-corrected counterpart used for that purpose.
 
 \subsubsection{ANOVA F-Test}
 
-The ANOVA F-test evaluates whether the between-group variance exceeds the within-group variance for each probe. Probes with larger F-scores and smaller associated $p$-values are treated as more discriminative. Under this policy, every probe with $p \leq 0.05$ is retained; the F-score is used for diagnostics.
+The ANOVA F-test evaluates whether the between-group variance exceeds the within-group variance for each probe. Probes with larger F-scores and smaller associated $p$-values are treated as more discriminative. Under this policy, every probe with $p \leq 0.05$ is retained; the F-score is used for diagnostics. As with the Welch $t$-test above, this is an uncorrected nominal threshold and is used here purely as a predictive filter, not as a claim of biological significance.
 
 \subsubsection{BH-FDR Ranked Filter}
 
@@ -81,41 +94,49 @@ The classification threshold was not fixed at the default value $0.5$ for the im
 
 This thresholding step was computed from the raw decision-function values rather than from probability estimates, avoiding the additional Platt-scaling cross-validation that would otherwise be triggered by setting the SVM to use \texttt{probability=True}. The same underlying decision score is also used to report the default-threshold and tuned-threshold comparisons for the imbalanced dataset.
 
+\textbf{Caution on in-sample threshold selection.} If the decision scores used to choose the Youden-optimal threshold are computed on the same training-fold observations used to fit the classifier, the threshold is chosen in-sample and can itself overfit, inflating the apparent benefit of threshold tuning. A methodologically stronger design selects the threshold using either an inner cross-validation loop nested inside the training fold, or out-of-fold predictions obtained by further splitting the training fold, so that no observation contributes to both fitting the classifier and choosing the threshold applied to it. Whichever design was actually used in the implementation should be confirmed and stated explicitly here, since the current wording (``training-fold predictions'') does not make this unambiguous.
+
 \subsubsection{Inner-CV Tuning of $C$}
 
 Every feature passing the active $p$-value or BH-FDR rule is retained. The SVM regularization parameter $C$ remains tuned within each outer training fold using an inner stratified cross-validation search over $\{0.01, 0.1, 1, 10, 100\}$, while comparing class-weight settings of either \texttt{None} or \texttt{"balanced"}. The held-out outer fold is never used to choose $C$.
 
 \subsection{Wrapper Methods}
 
-\subsubsection{SVM-RFE and Random-Forest Importance}
+\textbf{Taxonomy note.} Consistent with Chapter~1, this study classifies a feature-selection method as a \emph{wrapper} only when it repeatedly refits a model to different candidate subsets and searches the subset space using that model's performance or weights. Of the methods implemented here, only SVM-RFE meets this definition. Random Forest importance and XGBoost gain importance each derive an importance score from a single model fit and are therefore treated as \emph{embedded} methods (Section~\ref{sec:embedded}), not wrapper methods, resolving the inconsistent labelling used in an earlier draft of this chapter.
 
-Wrapper methods were implemented with an ANOVA-based significance prefiltering step. In each training fold, the pipeline computes ANOVA statistics and retains every candidate satisfying the active p-value threshold before the wrapper model is fit. SVM-RFE then iteratively eliminates the lowest absolute-coefficient features until the retained set reaches the sample count of the fitting data, a data-dependent bound ($n_{\mathrm{features}} \approx n_{\mathrm{samples}}$). Note that this bound is evaluated against the dataset actually passed to the selector: the Chapter~4 feature-selection tables run this stopping rule once against the full dataset (120 samples for GSE19804, 121 for GSE42568), producing the 120/121-feature sets reported there as a standalone characterization of each method. The Chapter~5 classifier evaluation instead fits the same selector inside each cross-validation training fold (approximately 80\% of the data), so the retained feature count there varies fold-to-fold and is smaller than the Chapter~4 figures; the two chapters are not reporting the same selection run. Random Forest importance retains only candidates whose impurity importance exceeds the mean importance; if the mean threshold is empty, the maximum-importance feature is retained.
+\subsubsection{SVM-RFE}
 
-The retained candidate set is then passed to either:
-\begin{itemize}
-    \item \textbf{SVM-RFE}, which repeatedly removes the least important features according to a linear SVM, or
-    \item \textbf{Random-Forest importance}, which ranks probes by impurity reduction.
-\end{itemize}
+SVM-RFE was implemented with an ANOVA-based significance prefiltering step. In each training fold, the pipeline computes ANOVA statistics and retains every candidate satisfying the active $p$-value threshold before the wrapper model is fit. SVM-RFE then iteratively eliminates the lowest absolute-coefficient features according to a linear SVM until the retained set reaches the sample count of the fitting data, a data-dependent bound ($n_{\mathrm{features}} \approx n_{\mathrm{samples}}$).
+
+This bound is evaluated against whichever dataset is actually passed to the selector, and the resulting retained-feature count is \emph{not} the same in every chapter. The Chapter~4 feature-selection tables run this stopping rule once against the full dataset (120 samples for GSE19804, 121 for GSE42568), producing the 120- and 121-probe sets reported there as a standalone, full-dataset characterization of the method. The Chapter~5 classifier evaluation instead fits SVM-RFE inside each cross-validation training fold (approximately 80\% of the data, i.e.\ approximately 96 samples for GSE19804 and 97 for GSE42568), so the retained feature count there is fold-dependent and is expected to be somewhat smaller than the Chapter~4 figures in most folds. Statements elsewhere in this thesis that ``RFE retains 120 features'' in the Chapter~5 classification results are describing the Chapter~4 full-dataset characterization and should not be read as the exact per-fold feature count used to produce the Chapter~5 classification scores; the actual fold-by-fold retained counts for SVM-RFE (and for every other fold-local selector) should be logged during cross-validation and reported as either the count for each of the 5 folds or a mean $\pm$ standard deviation, for both datasets.
+
+\subsection{Embedded Methods}
+\label{sec:embedded}
+
+\subsubsection{Random Forest Importance}
+
+Random Forest importance retains only candidates whose impurity importance exceeds the mean importance; if the mean-importance set is empty, the single maximum-importance feature is retained instead. The importance score is produced directly by fitting one Random Forest ensemble, with no iterative refitting of the model to different candidate subsets, which is why this method is classified as embedded rather than wrapper (see the taxonomy note above).
 
 \subsubsection{XGBoost Gain Importance}
 
-A third wrapper method uses a gradient-boosted tree ensemble (XGBoost) to rank features by their cumulative gain contribution. The same ANOVA pre-filter described above first narrows the candidate set to probes satisfying $p \leq 0.05$. An XGBClassifier with the \texttt{gbtree} booster is then trained on the pre-filtered features using gain-based importance scoring. Features whose gain importance exceeds the mean importance across all retained features are kept; the remainder are discarded. This produces a compact, data-driven subset that is typically smaller than both the SVM-RFE and Random Forest wrappers (46 features on GSE19804, 61 on GSE42568). The XGBoost wrapper is particularly effective at identifying nonlinear discriminative features that linear methods may not detect.
-
-The active wrapper implementations are SVM-RFE, Random Forest importance, and XGBoost gain importance; all three operate on the fold-local ANOVA-qualified candidate pool and apply their own algorithmic stopping rules.
-
-\subsection{Embedded Methods}
+XGBoost gain importance uses a gradient-boosted tree ensemble to rank features by their cumulative gain contribution. The same ANOVA pre-filter described above first narrows the candidate set to probes satisfying $p \leq 0.05$. An XGBClassifier with the \texttt{gbtree} booster is then trained once on the pre-filtered features using gain-based importance scoring. Features whose gain importance exceeds the mean importance across all retained features are kept; the remainder are discarded. This produces a compact, data-driven subset that is typically smaller than both the SVM-RFE and Random Forest selectors (46 features on the GSE19804 full-dataset characterization in Chapter~4, 61 on GSE42568). Because the importance score is a direct by-product of a single ensemble fit rather than an iterative subset search, XGBoost gain importance is classified here as an embedded, model-based method rather than a wrapper method.
 
 \subsubsection{LASSO (L1-Regularized Logistic Regression)}
 
 The embedded selector uses L1-regularized logistic regression. The model minimizes a penalized logistic-loss objective, and the regularization strength is selected by cross-validated logistic regression over an expanded grid of inverse-regularization values $C$ from $10^{-4}$ to $10^{1}$; smaller values of $C$ imply stronger regularization. The retained features are exactly those with nonzero fitted coefficients. If the selected $C$ produces an all-zero or all-nonzero solution, the implementation selects the sparsest non-degenerate candidate from the grid and records that fallback.
+
+The active embedded implementations are Random Forest importance, XGBoost gain importance, and LASSO; all three operate on the fold-local ANOVA-qualified candidate pool (for Random Forest and XGBoost) or the full standardized feature set (for LASSO) and apply their own algorithmic stopping rules.
 
 \section{Evaluation Metrics}
 
 The selected feature subsets were assessed with the Matthews Correlation Coefficient (MCC), accuracy, precision, recall, F1-score, and ROC-AUC when applicable. MCC was used as the main summary metric because it remains informative for imbalanced datasets and does not inflate performance when one class dominates the sample distribution.
 
 \subsection{Cross-Validation Strategy}
+\label{sec:cv}
 
-A 5-fold stratified cross-validation strategy was used throughout the study. This procedure preserves the class distribution within each fold, provides a more stable estimate of generalization performance, and reduces the chance that a single split dominates the results.
+A 5-fold stratified cross-validation strategy was used throughout the study. This procedure preserves the class distribution within each fold, provides a more stable estimate of generalization performance, and reduces the chance that a single split dominates the results. Every data-dependent preprocessing step---standardization, feature selection, SMOTE resampling, decision-threshold tuning, and hyperparameter search---is fitted using only the training fold and then applied unchanged to the held-out fold, via a single \texttt{sklearn.pipeline.Pipeline} object per configuration; each of these steps is a precondition for an unbiased cross-validation estimate, and only once all of them are verified to be fold-local can the pipeline be described as leakage-free.
+
+With 5-fold stratified cross-validation, GSE42568's minority (normal) class of 17 samples is split into folds of only around 3--4 normal samples each. Because specificity and MCC in this dataset are computed from such small per-fold minority counts, a single misclassified normal sample changes these metrics substantially, which is the source of the very large standard deviations reported for GSE42568 in Chapter~5 (for example, specificity of $0.3833 \pm 0.371$ for the BH-FDR path). These estimates should therefore be interpreted as highly variable rather than as precise point estimates, and repeated stratified cross-validation (i.e., repeating the 5-fold split several times with different random seeds and averaging) would give a more stable estimate of performance on GSE42568 if computationally feasible; this is noted as a direction for future work in Chapter~5.
 
 \section{Comparative Analysis of Selected Feature Sets}
 

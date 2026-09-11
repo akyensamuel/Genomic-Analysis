@@ -2,24 +2,24 @@
 
 \section{Data Characteristics}
 
-The feature-selection analysis was evaluated across two registered Gene Expression Omnibus (GEO) datasets after log\textsubscript{2} transformation and $z$-score normalization:
+The feature-selection analysis was evaluated across two Gene Expression Omnibus (GEO) microarray datasets (described fully in Chapter~3) after log\textsubscript{2} transformation and $z$-score normalization:
 \begin{itemize}
     \item \textbf{GSE19804 (Lung Cancer):} 120 samples (60 Cancer, 60 Normal), 54,675 probes. Perfectly balanced class distribution (1:1 ratio).
     \item \textbf{GSE42568 (Breast Cancer):} 121 samples (104 Cancer, 17 Normal), 54,675 probes. Severe class imbalance ($\approx$6:1 cancer-to-normal ratio).
 \end{itemize}
-Both datasets exhibit extreme high dimensionality with a probe-to-sample ratio exceeding 450:1, placing them firmly in the $p \gg n$ regime where conventional classifiers are prone to overfitting.
+Both datasets exhibit extreme high dimensionality with a probe-to-sample ratio exceeding 450:1, placing them firmly in the $p \gg n$ regime where conventional classifiers are prone to overfitting. As noted in Chapter~3, no probe-to-gene annotation was performed; the counts reported throughout this chapter are counts of retained \emph{probes}, not uniquely mapped genes.
 
 \section{Standardized Feature-Selection Outcomes}
 
 The comparative feature-selection script was rerun with $p \leq 0.05$ for the Welch and ANOVA filters and BH-adjusted $q \leq 0.05$ for the FDR-ranked method. Wrapper and embedded methods then applied their own algorithmic stopping rules to the fold-local candidate pool. The classifier evaluation used the same policy inside each training fold.
 
-The filtering methods apply a significance rule based on either raw $p \leq 0.05$ or BH-adjusted FDR $q \leq 0.05$. Wrapper and embedded methods use the p-qualified candidate set as input but apply their own algorithmic stopping rules: SVM-RFE stops at the training-sample bound, RF and XGBoost importance wrappers keep features whose importance exceeds the mean, and LASSO keeps nonzero coefficients. The BH-FDR-ranked selector is intentionally more conservative: it retains only features that survive multiple-testing correction and then orders those survivors by a combined F-score / effect-size / mutual-information score. The XGBoost wrapper applies an ANOVA pre-filter first and then fits an XGBoost classifier, retaining features whose gain-based importance exceeds the mean.
+The filtering methods apply a significance rule based on either raw $p \leq 0.05$ or BH-adjusted FDR $q \leq 0.05$. The wrapper and embedded methods use the $p$-qualified candidate set as input (except LASSO, which uses the full standardized feature set) but apply their own algorithmic stopping rules: SVM-RFE stops at the training-sample bound, RF and XGBoost importance keep features whose importance exceeds the mean, and LASSO keeps nonzero coefficients. As discussed in Chapter~3, only SVM-RFE is classified as a wrapper method in this study; RF importance, XGBoost gain importance, and LASSO are classified as embedded methods, since each derives its importance score from a single model fit rather than an iterative refit-and-search procedure. The retained method-key identifiers below (e.g., \texttt{wrapper\_rf}) reflect internal pipeline naming and are not used as the category label in this thesis. The BH-FDR-ranked selector is intentionally more conservative: it retains only features that survive multiple-testing correction and then orders those survivors by a combined F-score / effect-size / mutual-information score.
 
 Table~\ref{tab:feature_selection_counts} summarizes the comparison-stage results. The main outcome is that nominal p-value selection retains thousands of probes, whereas BH-FDR can be much more stringent and retain only a handful when the statistical evidence is weak.
 
 \begin{table}[H]
 \centering
-\caption{Feature-selection summary from the comparison runs.}
+\caption{Feature-selection summary from the comparison runs. Category reflects the taxonomy adopted in Chapter~3 (SVM-RFE is the sole wrapper method; RF, XGBoost, and LASSO are embedded methods); Method Key is the internal pipeline identifier and does not itself imply a category.}
 \label{tab:feature_selection_counts}
 \resizebox{\textwidth}{!}{
 \begin{tabular}{llcccc}
@@ -30,27 +30,27 @@ Table~\ref{tab:feature_selection_counts} summarizes the comparison-stage results
 \midrule
 Filter   & \texttt{filter\_ttest} (Welch's $t$-test) & 25,695 & 6,706 & 53.00\% & 87.73\% \\
 Filter   & \texttt{filter\_anova} (ANOVA $F$-test) & 25,707 & 3,217 & 52.98\% & 94.12\% \\
-Filter   & \texttt{filter\_fdr\_ranked} (BH-FDR ranked) & 21,858 & 2 & 60.02\% & 100.00\% \\
+Filter   & \texttt{filter\_fdr\_ranked} (BH-FDR ranked) & 21,858 & 2 & 60.02\% & $\approx$100\% \\
 Wrapper  & \texttt{wrapper\_svm} (RFE to $n_{\mathrm{train}}$) & 120 & 121 & 99.78\% & 99.78\% \\
-Wrapper  & \texttt{wrapper\_rf} (importance $>$ mean) & 333 & 415 & 99.39\% & 99.24\% \\
-Wrapper  & \texttt{wrapper\_xgb} (XGBoost gain $>$ mean) & 46 & 61 & 99.92\% & 99.89\% \\
+Embedded & \texttt{wrapper\_rf} (importance $>$ mean) & 333 & 415 & 99.39\% & 99.24\% \\
+Embedded & \texttt{wrapper\_xgb} (XGBoost gain $>$ mean) & 46 & 61 & 99.92\% & 99.89\% \\
 Embedded & \texttt{embedded\_lasso} (nonzero $L_1$) & 245 & 117 & 99.55\% & 99.79\% \\
 \bottomrule
 \end{tabular}
 }
 \end{table}
 
-The reduction is calculated as $100 \times (1 - n_{\text{selected}}/54{,}675)$: for example, $25{,}695$ retained probes correspond to $53.00\%$ reduction, while two retained probes correspond to $100.00\%$ reduction at the displayed precision. These are counts of all genes passing the relevant threshold. The XGBoost wrapper's 46 and 61 probes reflect the gain-based importance threshold applied on top of the ANOVA pre-filtered candidate set.
+The reduction is calculated as $100 \times (1 - n_{\text{selected}}/54{,}675)$: for example, $25{,}695$ retained probes correspond to $53.00\%$ reduction, while two retained probes correspond to a reduction of $99.9963\%$ (reported as ``approximately 100\%'' rather than ``$100.00\%$'', since the latter could be misread as no probes remaining). These are counts of all probes passing the relevant threshold. The XGBoost selector's 46 and 61 probes reflect the gain-based importance threshold applied on top of the ANOVA pre-filtered candidate set.
 
-The Benjamini-Hochberg False Discovery Rate (BH-FDR) method retained only 2 genes out of 54,675 for the GSE42568 dataset. This extreme reduction is a direct consequence of the dataset's severe class imbalance (104 cancer vs. 17 normal samples). While standard nominal p-value tests identify thousands of ostensibly significant genes, applying the strict FDR penalty to correct for the large-scale multiple-testing problem across the entire probe set removes most of these weak associations. Only two genes retained a differential expression signal strong enough to survive this stringent correction.
+The Benjamini-Hochberg False Discovery Rate (BH-FDR) method retained only 2 probes out of 54,675 for the GSE42568 dataset. Class imbalance (104 cancer vs.\ 17 normal samples) is one plausible contributor to this extreme reduction, since it limits the statistical power available to detect differences in the smaller group, but it is not established here as the sole or ``direct'' cause: the number of probes surviving BH correction also depends on the underlying effect sizes, the biological variability of the tissue, and the multiple-testing correction itself, none of which have been separately quantified in this analysis. While standard nominal $p$-value tests identify thousands of nominally significant probes at the uncorrected $p \leq 0.05$ threshold (a threshold that is, by construction, expected to admit many false positives at this scale --- see Chapter~3), applying the BH-FDR correction across the full probe set removes most of these. Only two probes retained a differential expression signal strong enough to survive this stringent correction; whether this reflects imbalance, weak underlying biological signal in this particular tissue comparison, or some combination of the two cannot be determined from this analysis alone.
 
 \section{Feature Selection Results on GSE19804 (Lung Cancer)}
 
 \subsection{Selected Probe Sets by Method}
 
-On the balanced GSE19804 lung cancer dataset, all 54,675 gene probes were evaluated. The analysis retained 25,695 Welch $t$-test genes, 25,707 ANOVA genes, and 21,858 BH-FDR genes. The XGBoost importance wrapper selected 46 genes by applying an above-mean gain threshold on features pre-filtered by ANOVA at $p \leq 0.05$.
+On the balanced GSE19804 lung cancer dataset, all 54,675 probes were evaluated. The analysis retained 25,695 Welch $t$-test probes, 25,707 ANOVA probes, and 21,858 BH-FDR probes. The XGBoost importance selector selected 46 probes by applying an above-mean gain threshold on features pre-filtered by ANOVA at $p \leq 0.05$.
 
-Table~\ref{tab:gse19804_probes} reports the retained-gene counts for each method.
+Table~\ref{tab:gse19804_probes} reports the retained-probe counts for each method.
 
 \begin{table}[H]
 \centering
@@ -59,7 +59,7 @@ Table~\ref{tab:gse19804_probes} reports the retained-gene counts for each method
 \small
 \begin{tabular}{lcc}
 \toprule
-\textbf{Method} & \textbf{Genes retained} & \textbf{Reduction} \\
+\textbf{Method} & \textbf{Probes retained} & \textbf{Reduction} \\
 \midrule
 Welch's $t$-test & 25,695 & 53.00\% \\
 ANOVA $F$-test & 25,707 & 52.98\% \\
@@ -79,13 +79,13 @@ Pairwise overlap counts are not interpreted as a fixed-panel consensus because t
 \subsection{Method-Specific Observations on GSE19804}
 
 \begin{enumerate}
-    \item \textbf{Filter Methods ($t$-test \& ANOVA):} Both methods retain approximately 25,700 genes at $p \leq 0.05$, leaving about 53\% of the original probe space.
+    \item \textbf{Filter Methods ($t$-test \& ANOVA):} Both methods retain approximately 25,700 probes at $p \leq 0.05$, leaving about 53\% of the original probe space.
 
     \item \textbf{SVM-RFE (Wrapper):} RFE iteratively removes features until the retained set reaches the training-sample count.
 
-    \item \textbf{Random Forest Importance (Wrapper):} Retains features whose impurity importance exceeds the mean, producing 333 features.
+    \item \textbf{Random Forest Importance (Embedded):} Retains features whose impurity importance exceeds the mean, producing 333 features.
 
-    \item \textbf{XGBoost Importance (Wrapper):} An ANOVA pre-filter narrows the search space to 25,707 candidates; XGBoost is then fitted and features with above-mean gain importance are kept, producing \textbf{46 features} (99.92\% reduction). This is the most compact wrapper output on GSE19804 and corresponds to the XGBoost classifier's superior downstream accuracy of 97.50\% reported in Chapter~5.
+    \item \textbf{XGBoost Importance (Embedded):} An ANOVA pre-filter narrows the search space to 25,707 candidates; XGBoost is then fitted and features with above-mean gain importance are kept, producing \textbf{46 features} (99.92\% reduction). This is the most compact embedded-method output on GSE19804 and corresponds to the XGBoost-selected feature subset's downstream accuracy of 97.50\% reported in Chapter~5.
 
     \item \textbf{LASSO Embedded:} Retains the 245 nonzero $L_1$ coefficients from the cross-validated sparse model.
 \end{enumerate}
@@ -94,7 +94,7 @@ Pairwise overlap counts are not interpreted as a fixed-panel consensus because t
 
 \subsection{Selected Probe Sets by Method}
 
-On the imbalanced GSE42568 breast cancer dataset, 54,675 probes were evaluated across 121 samples (104 cancer, 17 normal). Welch's $t$-test retained 6,706 genes, ANOVA retained 3,217, SVM-RFE retained 121, RF importance retained 415, XGBoost importance retained 61, LASSO retained 117, and BH-FDR retained 2 genes. Table~\ref{tab:gse42568_probes_summary} reports these counts.
+On the imbalanced GSE42568 breast cancer dataset, 54,675 probes were evaluated across 121 samples (104 cancer, 17 normal). Welch's $t$-test retained 6,706 probes, ANOVA retained 3,217, SVM-RFE retained 121, RF importance retained 415, XGBoost importance retained 61, LASSO retained 117, and BH-FDR retained 2 probes. Table~\ref{tab:gse42568_probes_summary} reports these counts.
 
 \begin{table}[H]
 \centering
@@ -103,7 +103,7 @@ On the imbalanced GSE42568 breast cancer dataset, 54,675 probes were evaluated a
 \small
 \begin{tabular}{lcc}
 \toprule
-\textbf{Method} & \textbf{Genes retained} & \textbf{Reduction} \\
+\textbf{Method} & \textbf{Probes retained} & \textbf{Reduction} \\
 \midrule
 Welch's $t$-test & 6,706 & 87.73\% \\
 ANOVA $F$-test & 3,217 & 94.12\% \\
@@ -121,39 +121,39 @@ LASSO (nonzero $L_1$) & 117 & 99.79\% \\
 The counts on GSE42568 differ markedly by statistical threshold, highlighting the impact of class imbalance on feature selection behaviour:
 
 \begin{enumerate}
-    \item \textbf{Different filter thresholds:} Welch's $t$-test retains 6,706 genes, ANOVA retains 3,217, and BH-FDR retains only 2.
+    \item \textbf{Different filter thresholds:} Welch's $t$-test retains 6,706 probes, ANOVA retains 3,217, and BH-FDR retains only 2.
 
-    \item \textbf{Algorithm-driven wrapper and embedded paths:} SVM-RFE retains 121 features, RF importance 415, XGBoost gain importance 61, and LASSO 117.
+    \item \textbf{Algorithm-driven wrapper and embedded paths:} SVM-RFE (wrapper) retains 121 features; RF importance, XGBoost gain importance, and LASSO (embedded) retain 415, 61, and 117 respectively.
 \end{enumerate}
 
 \subsection{Method-Specific Observations on GSE42568}
 
 \begin{enumerate}
-    \item \textbf{Welch's $t$-test:} Retained 6,706 genes, but the corresponding classifier reached MCC $=-0.0315$ and Specificity $=0\%$, showing that nominal significance alone did not recover the minority class.
+    \item \textbf{Welch's $t$-test:} Retained 6,706 probes, but the corresponding classifier reached MCC $=-0.0315$ and Specificity $=0\%$, showing that nominal significance alone did not recover the minority class.
 
-    \item \textbf{ANOVA $F$-test:} Retains 3,217 genes and produces MCC $=-0.0178$ with Specificity $=0\%$.
+    \item \textbf{ANOVA $F$-test:} Retains 3,217 probes and produces MCC $=-0.0178$ with Specificity $=0\%$.
 
     \item \textbf{SVM-RFE:} RFE stops at the training-sample bound, yielding 121 retained features and MCC $=-0.0561$.
 
-    \item \textbf{XGBoost Importance (Wrapper):} ANOVA pre-filters the space to 3,217 candidates; XGBoost is then fitted and above-mean gain features are retained, producing \textbf{61 features} (99.89\% reduction). Despite the compact selection, the downstream MCC is $-0.0178$ and Specificity remains $0\%$, confirming that the imbalance problem is not resolved by feature selection alone: the minority class is simply too small for the model to learn a reliable decision boundary.
+    \item \textbf{XGBoost Importance (Embedded):} ANOVA pre-filters the space to 3,217 candidates; XGBoost is then fitted and above-mean gain features are retained, producing \textbf{61 features} (99.89\% reduction). Despite the compact selection, the downstream MCC is $-0.0178$ and Specificity remains $0\%$, confirming that the imbalance problem is not resolved by feature selection alone: the minority class is simply too small for the model to learn a reliable decision boundary.
 
     \item \textbf{LASSO Embedded:} Retains 117 nonzero coefficients and produces MCC $=-0.0229$.
 \end{enumerate}
 
 \section{Cross-Dataset Comparison and Summary}
 
-Table~\ref{tab:cross_dataset_consensus} summarises the consensus-probe counts across both datasets, providing a quantitative comparison of method agreement.
+Table~\ref{tab:cross_dataset_consensus} summarises the retained-probe counts among the \emph{filter} methods only (Welch $t$-test, ANOVA, BH-FDR) across both datasets. It is restricted to filter methods because, across all seven methods evaluated, the smallest retained set on GSE19804 is in fact produced by the XGBoost embedded selector (46 probes, Table~\ref{tab:gse19804_probes}), not by BH-FDR; an earlier version of this table incorrectly reported 21,858 (BH-FDR) as the overall smallest retained set across all methods.
 
 \begin{table}[H]
 \centering
-\caption{Selection summary across datasets.}
+\caption{Filter-method selection summary across datasets. Restricted to Welch $t$-test, ANOVA, and BH-FDR; see Tables~\ref{tab:gse19804_probes} and~\ref{tab:gse42568_probes_summary} for the smaller sets produced by the wrapper and embedded methods.}
 \label{tab:cross_dataset_consensus}
 \begin{tabular}{lcc}
 \toprule
-\textbf{Summary} & \textbf{GSE19804 (Balanced)} & \textbf{GSE42568 (Imbalanced)} \\
+\textbf{Summary (filter methods only)} & \textbf{GSE19804 (Balanced)} & \textbf{GSE42568 (Imbalanced)} \\
 \midrule
 Smallest retained set & 21,858 (BH-FDR) & 2 (BH-FDR) \\
-Largest retained set & 25,707 & 6,706 \\
+Largest retained set & 25,707 (ANOVA) & 6,706 (Welch $t$-test) \\
 \bottomrule
 \end{tabular}
 \end{table}
@@ -161,5 +161,5 @@ Largest retained set & 25,707 & 6,706 \\
 Three key findings emerge from comparing the two datasets:
 
 \begin{enumerate}
-    \item \textbf{Selection counts differ by dataset.} GSE19804 retains 21,858--25,707 genes under filter methods, whereas GSE42568 retains 2--6,706 genes depending on the statistical criterion. Wrapper methods produce much more compact sets: SVM-RFE retains 120/121, RF importance 333/415, XGBoost gain 46/61, and LASSO 245/117 features for GSE19804 and GSE42568 respectively.
+    \item \textbf{Selection counts differ by dataset.} GSE19804 retains 21,858--25,707 probes under filter methods, whereas GSE42568 retains 2--6,706 probes depending on the statistical criterion. The wrapper and embedded methods produce much more compact sets: SVM-RFE (wrapper) retains 120/121; RF importance, XGBoost gain, and LASSO (embedded) retain 333/415, 46/61, and 245/117 features respectively for GSE19804 and GSE42568.
 \end{enumerate}
