@@ -41,6 +41,7 @@ from sklearn.metrics import (
 )
 from sklearn.model_selection import StratifiedKFold
 from sklearn.pipeline import Pipeline
+from sklearn.preprocessing import StandardScaler
 from sklearn.svm import SVC
 from xgboost import XGBClassifier
 from sklearn.linear_model import LogisticRegression
@@ -159,6 +160,19 @@ class SVMClassifierWithCV:
     # Data loading
     # ------------------------------------------------------------------
     def _load_data(self) -> None:
+        """
+        Load the LOG-STAGE (pre-standardization) cache.
+
+        IMPORTANT: this deliberately does NOT load the full-dataset
+        standardized cache (load_preprocessed_data()). That cache's
+        StandardScaler was fit on every sample, including whichever ones
+        later become the held-out test fold in a given CV split — that is
+        data leakage. Standardization for cross-validated evaluation must
+        instead be fit fold-locally, which is why self.X here is left on
+        the log2(x+1) scale, and why train_path_a_baseline() and
+        train_path_b_optimized() each fit their own StandardScaler inside
+        the fold loop, on the training fold only.
+        """
         logger.info("=" * 70)
         logger.info("LOADING GENOMIC EXPERIMENT DATA")
         logger.info("=" * 70)
@@ -166,17 +180,52 @@ class SVMClassifierWithCV:
         processor = GenomicDataProcessor(self.dataset_name, str(self.base_dir))
 
         try:
-            self.X, self.y = processor.load_preprocessed_data()
-            logger.info("Loaded from preprocessed cache.")
+            self.X, self.y = processor.load_log_stage_data()
+            logger.info("Loaded from log-stage cache (pre-standardization).")
         except Exception as exc:
             logger.warning(
-                f"Cache load failed ({exc}). Running full preprocessing pipeline …"
+                f"Log-stage cache load failed ({exc}). Running full preprocessing pipeline …"
             )
-            self.X, self.y = processor.preprocess_complete()
+            processor.load_data()
+            self.X = processor.apply_log_transformation()
+            self.y = processor.y
+            processor.save_log_stage_data()
+            # Also (re)build the full-dataset-standardized cache used by
+            # feature_selection.py's standalone / Chapter 4 characterization
+            # mode, so both caches stay in sync.
+            processor.apply_standardization()
             processor.save_preprocessed_data()
 
         logger.info(f"Data shape: {self.X.shape}")
         logger.info(f"Class distribution: {np.bincount(self.y).tolist()}")
+        logger.info(
+            "Standardization will be fit fold-locally inside the CV loop "
+            "(see _fold_local_scale), not on this full matrix."
+        )
+
+    @staticmethod
+    def _fold_local_scale(
+        X_train: pd.DataFrame, X_test: pd.DataFrame
+    ) -> tuple[pd.DataFrame, pd.DataFrame]:
+        """
+        Fit StandardScaler on the training fold only, then apply the same
+        fitted transform to both the training and test folds. This is the
+        fold-local replacement for the previous full-dataset standardization
+        step, and is what closes the data-leakage gap described in
+        Chapter 3 / Chapter 5 of the thesis.
+        """
+        scaler = StandardScaler()
+        X_train_scaled = pd.DataFrame(
+            scaler.fit_transform(X_train),
+            index=X_train.index,
+            columns=X_train.columns,
+        )
+        X_test_scaled = pd.DataFrame(
+            scaler.transform(X_test),
+            index=X_test.index,
+            columns=X_test.columns,
+        )
+        return X_train_scaled, X_test_scaled
 
     # ------------------------------------------------------------------
     # Imbalanced-data helpers used for GSE42568 experiments
@@ -420,6 +469,11 @@ class SVMClassifierWithCV:
             y_train = self.y[train_idx]
             y_test  = self.y[test_idx]
 
+            # Fold-local standardization: fit on the training fold only,
+            # then apply the same transform to the test fold. Replaces the
+            # previous full-dataset StandardScaler fit in preprocessing.py.
+            X_train, X_test = self._fold_local_scale(X_train, X_test)
+
             svm = SVC(
                 kernel="linear", C=1.0,
                 random_state=self.random_state,
@@ -475,6 +529,16 @@ class SVMClassifierWithCV:
             X_test = self.X.iloc[test_idx]
             y_train = self.y[train_idx]
             y_test = self.y[test_idx]
+
+            # Fold-local standardization: fit on the training fold only,
+            # then apply the same transform to the test fold, BEFORE any
+            # feature selection, SMOTE, or classifier fitting sees the data.
+            # Note this is invariant to the Welch/ANOVA/BH-FDR p-values
+            # (per-feature affine scaling cancels out of the t/F statistic),
+            # but it does matter for LASSO, the linear SVM's margin, and
+            # SMOTE's distance calculations, which is why it must happen
+            # here rather than on the pre-cached full dataset.
+            X_train, X_test = self._fold_local_scale(X_train, X_test)
 
             selected_k = n_features if tune_k is None else tune_k
             if tune_k_candidates is not None:
@@ -584,6 +648,13 @@ class SVMClassifierWithCV:
             metrics["n_features"] = n_selected
             metrics["selected_k"] = selected_k
             metrics["feature_method"] = feature_method
+            # Persist the per-fold selected feature indices too (not just
+            # the count), so downstream analysis can compute cross-fold
+            # selection stability (e.g. Jaccard overlap between folds) —
+            # this was previously discarded and only the count was kept.
+            metrics["selected_feature_indices"] = [
+                int(i) for i in np.asarray(selector.selected_features).tolist()
+            ]
             if tune_threshold:
                 metrics["youden_threshold"] = float(threshold)
             fold_results.append(metrics)
@@ -637,6 +708,7 @@ class SVMClassifierWithCV:
             "selected_k",
             "feature_method",
             "youden_threshold",
+            "selected_feature_indices",
             "tn",
             "fp",
             "fn",
@@ -647,6 +719,15 @@ class SVMClassifierWithCV:
             if col not in skip_cols:
                 summary[f"{col}_mean"] = float(metrics_df[col].mean())
                 summary[f"{col}_std"]  = float(metrics_df[col].std())
+
+        # Explicitly summarise the retained-feature count per fold (this
+        # was previously silently dropped via skip_cols, which is why the
+        # thesis could not report fold-level feature counts from the saved
+        # JSON — see Chapter 3/5 discussion of comment #19-21).
+        if "n_features" in metrics_df.columns:
+            summary["n_features_per_fold"] = [int(v) for v in metrics_df["n_features"].tolist()]
+            summary["n_features_mean"] = float(metrics_df["n_features"].mean())
+            summary["n_features_std"] = float(metrics_df["n_features"].std())
 
         self.results[path_name]["summary"] = summary
 
@@ -717,14 +798,34 @@ class SVMClassifierWithCV:
             path: {
                 "summary": data.get("summary", {}),
                 "n_folds": len(data.get("fold_results", [])),
+                # Previously omitted: the actual per-fold metrics (including
+                # n_features and selected_feature_indices) were computed but
+                # discarded here, leaving only the aggregated mean/std. They
+                # are now persisted so fold-level reporting (thesis comments
+                # #19-21, #41, #57-58) can be produced without rerunning.
+                "fold_results": data.get("fold_results", []),
             }
             for path, data in self.results.items()
             if data
         }
 
+        def _json_default(obj):
+            # fold_results now includes raw sklearn metric outputs
+            # (numpy.float64 / numpy.integer), which json.dump cannot
+            # serialise natively; the aggregated "summary" values were
+            # already cast to plain floats in _aggregate_cv_results and are
+            # unaffected by this.
+            if isinstance(obj, (np.floating,)):
+                return float(obj)
+            if isinstance(obj, (np.integer,)):
+                return int(obj)
+            if isinstance(obj, np.ndarray):
+                return obj.tolist()
+            return str(obj)
+
         json_path = self.results_dir / f"svm_results_{timestamp}.json"
         with open(json_path, "w") as fh:
-            json.dump(results_json, fh, indent=2)
+            json.dump(results_json, fh, indent=2, default=_json_default)
         logger.info(f"JSON written to: {json_path}")
 
         summaries = []
