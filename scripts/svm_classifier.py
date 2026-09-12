@@ -1,8 +1,8 @@
 """
 SVM Classifier with Nested Cross-Validation
 Implements dual-track training:
-Path A — Baseline: SVM on all features (no feature selection)
-Path B — Optimised: SVM with feature selection INSIDE each training fold.
+Path A - Baseline: SVM on all features (no feature selection)
+Path B - Optimised: SVM with feature selection INSIDE each training fold.
 
 CRITICAL FIX: Uses sklearn.pipeline.Pipeline to guarantee that feature 
 selection is fitted ONLY on the training fold, completely preventing 
@@ -62,7 +62,7 @@ from preprocessing import GenomicDataProcessor
 logger = logging.getLogger(__name__)
 
 # ---------------------------------------------------------------------------
-# Dataset metadata helper — called lazily, not at import time
+# Dataset metadata helper - called lazily, not at import time
 # ---------------------------------------------------------------------------
 def build_dataset_info(project_dir: Optional[str] = None) -> dict:
     """
@@ -148,13 +148,25 @@ class SVMClassifierWithCV:
         stream_handler = logging.StreamHandler()
         stream_handler.setLevel(logging.INFO)
         stream_handler.setFormatter(formatter)
+        # Defensive hardening: some Windows consoles default to a legacy
+        # codepage (e.g. cp1252) that cannot represent arbitrary Unicode,
+        # which previously crashed emit() on any non-ASCII log character
+        # (visible as a "--- Logging error ---" traceback, though logging
+        # swallows it rather than stopping the run). All log messages in
+        # this codebase are now plain ASCII, but this reconfigure() call
+        # is a second line of defense against the same failure mode.
+        if hasattr(stream_handler.stream, "reconfigure"):
+            try:
+                stream_handler.stream.reconfigure(errors="backslashreplace")
+            except Exception:
+                pass
 
         logger.setLevel(logging.INFO)
         logger.addHandler(file_handler)
         logger.addHandler(stream_handler)
         logger.propagate = False
 
-        logger.info(f"Logging initialised → {log_file}")
+        logger.info(f"Logging initialised -> {log_file}")
 
     # ------------------------------------------------------------------
     # Data loading
@@ -166,7 +178,7 @@ class SVMClassifierWithCV:
         IMPORTANT: this deliberately does NOT load the full-dataset
         standardized cache (load_preprocessed_data()). That cache's
         StandardScaler was fit on every sample, including whichever ones
-        later become the held-out test fold in a given CV split — that is
+        later become the held-out test fold in a given CV split - that is
         data leakage. Standardization for cross-validated evaluation must
         instead be fit fold-locally, which is why self.X here is left on
         the log2(x+1) scale, and why train_path_a_baseline() and
@@ -184,7 +196,7 @@ class SVMClassifierWithCV:
             logger.info("Loaded from log-stage cache (pre-standardization).")
         except Exception as exc:
             logger.warning(
-                f"Log-stage cache load failed ({exc}). Running full preprocessing pipeline …"
+                f"Log-stage cache load failed ({exc}). Running full preprocessing pipeline ..."
             )
             processor.load_data()
             self.X = processor.apply_log_transformation()
@@ -448,12 +460,12 @@ class SVMClassifierWithCV:
         return best_k, mean_scores
 
     # ------------------------------------------------------------------
-    # Path A — Baseline (no feature selection)
+    # Path A - Baseline (no feature selection)
     # ------------------------------------------------------------------
     def train_path_a_baseline(self) -> None:
         """Evaluate SVM on the full feature set as a baseline."""
         logger.info("\n" + "=" * 70)
-        logger.info("PATH A: BASELINE — All features (no feature selection)")
+        logger.info("PATH A: BASELINE - All features (no feature selection)")
         logger.info("=" * 70)
 
         cv = StratifiedKFold(
@@ -503,7 +515,7 @@ class SVMClassifierWithCV:
         self._print_cv_summary("path_a")
 
     # ------------------------------------------------------------------
-    # Path B — Optimised (LEAKAGE-FREE via sklearn Pipeline)
+    # Path B - Optimised (LEAKAGE-FREE via sklearn Pipeline)
     # ------------------------------------------------------------------
     def train_path_b_optimized(self, feature_method: str = "filter_ttest", n_features: int = 20, p_value: Optional[float] = None, apply_smote: bool = False, tune_threshold: bool = False, tune_k: Optional[int] = None, tune_k_candidates: Optional[list[int]] = None, tune_c: bool = False, alternative_classifier: Optional[str] = None) -> None:
         """
@@ -512,7 +524,7 @@ class SVMClassifierWithCV:
         This guarantees ZERO data leakage: the feature selector only ever sees the training data for that specific fold.
         """
         logger.info("\n" + "=" * 70)
-        logger.info(f"PATH B: OPTIMISED — Feature selection: {feature_method} (n={n_features})")
+        logger.info(f"PATH B: OPTIMISED - Feature selection: {feature_method} (n={n_features})")
         logger.info("=" * 70)
 
         p_value = p_value if p_value is not None else getattr(self, "p_value", None)
@@ -650,7 +662,7 @@ class SVMClassifierWithCV:
             metrics["feature_method"] = feature_method
             # Persist the per-fold selected feature indices too (not just
             # the count), so downstream analysis can compute cross-fold
-            # selection stability (e.g. Jaccard overlap between folds) —
+            # selection stability (e.g. Jaccard overlap between folds) -
             # this was previously discarded and only the count was kept.
             metrics["selected_feature_indices"] = [
                 int(i) for i in np.asarray(selector.selected_features).tolist()
@@ -662,6 +674,14 @@ class SVMClassifierWithCV:
             logger.info(f"  Accuracy: {metrics['accuracy']:.4f} | MCC: {metrics['mcc']:.4f} | Specificity: {metrics.get('specificity', 0.0):.4f}")
 
         key = f"path_b_{feature_method}"
+        # FIX: apply_smote previously wasn't part of the key derivation at
+        # all, so a SMOTE run and a plain baseline run for the same
+        # feature_method wrote to the identical self.results key, and
+        # whichever ran later silently overwrote the earlier one. This is
+        # what run_improved_imbalanced_analysis() hits, since it runs
+        # baseline immediately followed by smote for every method.
+        if apply_smote:
+            key = f"{key}_smote"
         if tune_threshold:
             key = f"path_b_{feature_method}_threshold_tuned"
         if tune_k_candidates is not None:
@@ -695,7 +715,21 @@ class SVMClassifierWithCV:
             ]:
                 try:
                     self.train_path_b_optimized(feature_method=method, n_features=self.n_features, p_value=self.p_value, apply_smote=config["apply_smote"], tune_threshold=config["tune_threshold"], tune_c=config["tune_c"], alternative_classifier=config["alternative_classifier"])
-                    results[config["label"]] = self.results.get(f"path_b_{method}_threshold_tuned" if config["tune_threshold"] else f"path_b_{method}_c_tuned" if config["tune_c"] else f"path_b_{method}_{config['alternative_classifier']}" if config["alternative_classifier"] is not None else f"path_b_{method}")
+                    # FIX: this lookup previously didn't account for
+                    # apply_smote, so it fetched the wrong (collided) key
+                    # for the smote config. Mirror the exact key logic used
+                    # in train_path_b_optimized above.
+                    if config["tune_threshold"]:
+                        result_key = f"path_b_{method}_threshold_tuned"
+                    elif config["tune_c"]:
+                        result_key = f"path_b_{method}_c_tuned"
+                    elif config["alternative_classifier"] is not None:
+                        result_key = f"path_b_{method}_{config['alternative_classifier']}"
+                    elif config["apply_smote"]:
+                        result_key = f"path_b_{method}_smote"
+                    else:
+                        result_key = f"path_b_{method}"
+                    results[config["label"]] = self.results.get(result_key)
                 except Exception as exc:
                     logger.error(f"Imbalanced-data experiment failed for {method}: {exc}")
         return results
@@ -723,7 +757,7 @@ class SVMClassifierWithCV:
         # Explicitly summarise the retained-feature count per fold (this
         # was previously silently dropped via skip_cols, which is why the
         # thesis could not report fold-level feature counts from the saved
-        # JSON — see Chapter 3/5 discussion of comment #19-21).
+        # JSON - see Chapter 3/5 discussion of comment #19-21).
         if "n_features" in metrics_df.columns:
             summary["n_features_per_fold"] = [int(v) for v in metrics_df["n_features"].tolist()]
             summary["n_features_mean"] = float(metrics_df["n_features"].mean())
@@ -886,7 +920,7 @@ def main() -> None:
     parser.add_argument("--method", "-m", default=None,
                         help="Run a single Path B method (default: run all)")
     parser.add_argument("--max-workers", type=int, default=1,
-                        help="Max parallel workers for Path B methods (default: 1 — no parallelism)")
+                        help="Max parallel workers for Path B methods (default: 1 - no parallelism)")
     parser.add_argument("--p-value", type=float, default=0.05,
                         help="Optional p-value threshold to pass to selectors (default: 0.05)")
     parser.add_argument("--n-features", type=int, default=20,

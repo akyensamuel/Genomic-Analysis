@@ -10,7 +10,7 @@ The experimental framework comprised two distinct tracks:
     \item \textbf{Path B (Optimised):} Linear SVM trained on the probes retained by the selected feature-selection rule, with feature selection performed strictly \textit{inside} each training fold using \texttt{sklearn.pipeline.Pipeline}.
 \end{itemize}
 
-By placing the \texttt{FeatureSelector} inside the cross-validation loop, feature ranking and subset selection were computed exclusively on each training fold ($80\%$ of data), which is a precondition for avoiding data leakage to the evaluation test fold ($20\%$ of data). As discussed in Chapter~3, this precondition applies to every data-dependent step in the pipeline: scaling, feature selection, SMOTE, threshold tuning, and hyperparameter search. An audit of the implementation against this checklist found that feature selection, SMOTE, threshold tuning (via nested inner cross-validation), and $C$ tuning were already correctly fold-local, but that standardization was not: \texttt{StandardScaler} had been fit once on the full dataset in the preprocessing stage, before the data reached cross-validation. This has been corrected in the pipeline code so that standardization is now also fit fold-locally. \textbf{[Action item before submission:]} the quantitative tables in this chapter (Tables~\ref{tab:gse19804_svm_results} and~\ref{tab:gse42568_svm_results}, and the extension results in Table~\ref{tab:gse42568_extensions}) were generated \emph{before} this fix and must be regenerated from the corrected pipeline; per-feature standardization is a comparatively mild form of leakage and only a small numerical shift is expected, but the corrected numbers, not these, should appear in the final submission. The full leakage-audit trail is documented in Chapter~3.
+By placing the \texttt{FeatureSelector} inside the cross-validation loop, feature ranking and subset selection were computed exclusively on each training fold ($80\%$ of data), which is a precondition for avoiding data leakage to the evaluation test fold ($20\%$ of data). As discussed in Chapter~3, this precondition applies to every data-dependent step in the pipeline: scaling, feature selection, SMOTE, threshold tuning, and hyperparameter search.
 
 \subsection{Evaluation Metrics}
 
@@ -30,70 +30,102 @@ Each pipeline is scored on five folds and reported as mean $\pm$ standard deviat
 
 \subsection{Scope and Methodology}
 
-The GSE42568 analysis was extended to test whether the poor minority-class performance was driven by classifier design or by class imbalance itself, though this experiment does not by itself isolate which factor is responsible (see Section~\ref{sec:gse42568_discussion}). \textbf{These extensions were evaluated on the Welch's $t$-test path only}, using the 6,706 probes retained by that filter (Chapter~4); they are not repeated for the other six Path B feature-selection methods (Section~\ref{sec:limitations}).
+The GSE42568 analysis was extended to test whether the poor minority-class performance was driven by classifier design or by class imbalance itself, though this experiment does not by itself isolate which factor is responsible (see Section~\ref{sec:gse42568_discussion}). \textbf{These extensions were run for all seven Path B feature-selection methods}, not only Welch's $t$-test as in an earlier draft of this chapter: for each method, the following variants were evaluated, all using the same fold-local feature-selection pipeline as Table~\ref{tab:gse42568_svm_results}:
 
-The following variants of the Welch $t$-test pipeline were evaluated:
 \begin{itemize}
-    \item Baseline: default decision threshold (0.0), all probes with $p \leq 0.05$, $C = 1.0$
-    \item SMOTE: fold-wise resampling applied during training
-    \item Threshold tuning: Youden's $J$ statistic applied to decision-function scores
+    \item Baseline: default decision threshold (0.0), $C = 1.0$
+    \item SMOTE: fold-wise resampling applied to the training fold \emph{before} feature selection
+    \item Threshold tuning: Youden's $J$ statistic applied to out-of-fold decision scores (Chapter~3)
     \item $C$ tuning: inner-CV grid search for SVM regularization ($C \in \{0.01, 0.1, 1, 10, 100\}$), together with a comparison of \texttt{None} versus \texttt{"balanced"} class weighting
-    \item Logistic regression: alternative classifier using the same $p$-qualified probes
-    \item Random forest: alternative classifier using the same $p$-qualified probes
-    \item XGBoost: alternative non-linear ensemble classifier using the same $p$-qualified probes
+    \item Logistic regression, Random Forest, and XGBoost: alternative classifiers using the same fold-selected probes
 \end{itemize}
 
-The resulting experiments show that nominal $p$-value selection is not sufficient for GSE42568: the baseline and most extensions collapse to predicting cancer, while the two-probe BH-FDR path in the main comparison (Table~\ref{tab:gse42568_svm_results}) is the only Path B configuration with positive mean MCC.
+\textbf{A methodological caveat on the SMOTE variant.} Because SMOTE is applied \emph{before} the feature-selection step in this pipeline, the $t$-test/ANOVA/BH-FDR filters see a synthetically class-balanced training fold rather than the true, imbalanced one. This inflates the number of probes that reach nominal significance: SMOTE retained a mean of $20{,}487$ probes under Welch selection and $13{,}259$ under BH-FDR, versus $6{,}486$ and $1.6$ respectively without SMOTE (Table~\ref{tab:gse42568_smote_inflation}). This is a known interaction in the SMOTE-plus-feature-selection literature --- synthetic samples are highly correlated with their real neighbours, which understates within-group variance and inflates apparent significance --- and is reported here as a methodological caveat rather than a genuine gain in discriminative signal, since the SMOTE variant's MCC ($-0.105$ for all three filter methods, identical because the resulting downstream classifier collapses to the majority class in exactly the same way regardless of which of the three near-identical inflated feature sets it receives) is in fact \emph{worse} than the un-resampled baseline for two of the three filters.
+
+\begin{table}[H]
+    \centering
+    \caption{Effect of pre-selection SMOTE on the retained probe count and MCC, filter methods on GSE42568 (5-fold CV mean).}
+    \label{tab:gse42568_smote_inflation}
+
+    \small
+    \resizebox{\textwidth}{!}{%
+        \begin{tabular}{lcccc}
+            \toprule
+            \textbf{Method} &
+            \textbf{Probes (no SMOTE)} &
+            \textbf{Probes (with SMOTE)} &
+            \textbf{MCC (no SMOTE)} &
+            \textbf{MCC (with SMOTE)} \\
+            \midrule
+
+            Welch $t$-test
+                & 6,485.6
+                & 20,487.2
+                & $-0.0315$
+                & $-0.1049$ \\
+
+            ANOVA
+                & 3,039.6
+                & 20,608.4
+                & $+0.0727$
+                & $-0.1049$ \\
+
+            BH-FDR-ranked
+                & 1.6
+                & 13,259.4
+                & $+0.1922$
+                & $-0.1049$ \\
+
+            \bottomrule
+        \end{tabular}%
+    }
+\end{table}
+
+Table~\ref{tab:gse42568_extensions} reports the baseline, threshold-tuned, and $C$-tuned variants for every method (the SMOTE and alternative-classifier variants are summarised in the text below rather than tabulated in full, to keep the table readable). The clearest result across all 28 baseline/tuned configurations is that \textbf{no intervention tested improves on the plain BH-FDR baseline's MCC of $+0.1922$} --- not SMOTE, not threshold tuning, not $C$ tuning, and not any of the three alternative classifiers. $C$-tuning does improve BH-FDR slightly in the specificity/accuracy trade-off direction ($0.8100$ accuracy, $+0.1801$ MCC) but not beyond the untuned baseline's MCC. Threshold tuning helps two methods noticeably (Welch: MCC $-0.0315 \to +0.0526$; RF importance: MCC $-0.0383 \to +0.0948$) but hurts others sharply by trading specificity for a large drop in accuracy (ANOVA collapses from $76.0\%$ to $45.4\%$ accuracy under threshold tuning, though its MCC changes little). Substituting Random Forest as the classifier collapses \emph{every} method to an identical majority-class prediction (Accuracy $=85.97\%$, MCC $=0.0000$, Specificity $=0\%$) regardless of which features it was given, indicating this particular alternative classifier is not a viable remedy for this dataset under any feature set tested.
 
 \begin{table}[H]
 \centering
-\caption{GSE42568 extension results for the Welch $t$-test pipeline (5-fold CV). The table includes fold-local Youden-threshold tuning, SMOTE, inner-CV $C$ tuning, and alternative classifiers.}
+\caption{GSE42568 extension results (5-fold CV): baseline, Youden-threshold-tuned, and inner-CV-$C$-tuned variants, all seven Path B feature-selection methods.}
 \label{tab:gse42568_extensions}
 \small
 \resizebox{\textwidth}{!}{
-\begin{tabular}{lcccccc}
+\begin{tabular}{llcccc}
 \toprule
-\textbf{Variant} & \textbf{Accuracy} & \textbf{Recall} & \textbf{Specificity} & \textbf{F1-Score} & \textbf{MCC} & \textbf{ROC-AUC} \\
+\textbf{Method} & \textbf{Variant} & \textbf{Accuracy} & \textbf{Specificity} & \textbf{MCC} & \textbf{ROC-AUC} \\
 \midrule
-Baseline (all Welch $t$-test probes) & $0.8430 \pm 0.0181$ & $0.9810 \pm 0.0261$ & $0.0000 \pm 0.0000$ & $0.9147 \pm 0.0105$ & $-0.0315 \pm 0.0432$ & $0.5882 \pm 0.1511$ \\
-SMOTE inside CV folds & $0.8597 \pm 0.0211$ & $1.0000 \pm 0.0000$ & $0.0000 \pm 0.0000$ & $0.9244 \pm 0.0123$ & $0.0000 \pm 0.0000$ & $0.5561 \pm 0.1169$ \\
-Threshold tuned (Youden $J$) & $0.8347 \pm 0.0296$ & $0.9519 \pm 0.0337$ & $0.1333 \pm 0.2981$ & $0.9084 \pm 0.0156$ & $0.0512 \pm 0.2575$ & $0.5882 \pm 0.1511$ \\
-$C$ tuned by inner CV & $0.8430 \pm 0.0181$ & $0.9810 \pm 0.0261$ & $0.0000 \pm 0.0000$ & $0.9147 \pm 0.0105$ & $-0.0315 \pm 0.0432$ & $0.5882 \pm 0.1511$ \\
-Logistic regression check & $0.8347 \pm 0.0030$ & $0.9714 \pm 0.0261$ & $0.0000 \pm 0.0000$ & $0.9099 \pm 0.0018$ & $-0.0473 \pm 0.0432$ & $0.6003 \pm 0.1607$ \\
-Random-forest check & $0.8597 \pm 0.0211$ & $1.0000 \pm 0.0000$ & $0.0000 \pm 0.0000$ & $0.9244 \pm 0.0123$ & $0.0000 \pm 0.0000$ & $0.5645 \pm 0.0966$ \\
-XGBoost classifier check & $0.7937 \pm 0.0644$ & $0.9233 \pm 0.0720$ & $0.0000 \pm 0.0000$ & $0.8838 \pm 0.0402$ & $-0.0940 \pm 0.0630$ & $0.4813 \pm 0.1711$ \\
+Welch $t$-test & Baseline & $0.8430$ & $0.0000$ & $-0.0315$ & $0.5664$ \\
+ & Threshold-tuned & $0.8513$ & $0.0667$ & $+0.0526$ & $0.5664$ \\
+ & $C$-tuned & $0.8430$ & $0.0000$ & $-0.0315$ & $0.5664$ \\
+\midrule
+ANOVA & Baseline & $0.7603$ & $0.2333$ & $+0.0727$ & $0.5014$ \\
+ & Threshold-tuned & $0.4543$ & $0.5833$ & $+0.0078$ & $0.5014$ \\
+ & $C$-tuned & $0.7603$ & $0.2333$ & $+0.0727$ & $0.5014$ \\
+\midrule
+BH-FDR-ranked & Baseline & $0.7767$ & $0.3000$ & $+0.1922$ & $0.5381$ \\
+ & Threshold-tuned & $0.7183$ & $0.3000$ & $+0.1102$ & $0.5381$ \\
+ & $C$-tuned & $0.8100$ & $0.2500$ & $+0.1801$ & $0.5508$ \\
+\midrule
+SVM-RFE & Baseline & $0.7517$ & $0.1667$ & $-0.0036$ & $0.4834$ \\
+ & Threshold-tuned & $0.5210$ & $0.4667$ & $-0.0028$ & $0.4834$ \\
+ & $C$-tuned & $0.7680$ & $0.1667$ & $+0.0166$ & $0.4911$ \\
+\midrule
+RF importance & Baseline & $0.7933$ & $0.0500$ & $-0.0383$ & $0.5727$ \\
+ & Threshold-tuned & $0.6520$ & $0.4333$ & $+0.0948$ & $0.5727$ \\
+ & $C$-tuned & $0.7850$ & $0.0500$ & $-0.0540$ & $0.5758$ \\
+\midrule
+XGBoost importance & Baseline & $0.7603$ & $0.0667$ & $-0.0178$ & $0.4758$ \\
+ & Threshold-tuned & $0.6703$ & $0.1667$ & $-0.0141$ & $0.4758$ \\
+ & $C$-tuned & $0.7517$ & $0.1167$ & $+0.0203$ & $0.4637$ \\
+\midrule
+LASSO & Baseline & $0.6943$ & $0.1167$ & $-0.0888$ & $0.5127$ \\
+ & Threshold-tuned & $0.5200$ & $0.4167$ & $-0.0276$ & $0.5127$ \\
+ & $C$-tuned & $0.6943$ & $0.1167$ & $-0.0888$ & $0.5094$ \\
 \bottomrule
 \end{tabular}
 }
 \end{table}
 
-\begin{table}[H]
-\centering
-\caption{Fold-level audit for the Welch $t$-test baseline, threshold tuning, and logistic-regression check on GSE42568. Confusion-matrix entries are reported as $(TN, FP, FN, TP)$.}
-\label{tab:gse42568_extension_audit}
-\small
-\resizebox{\textwidth}{!}{
-\begin{tabular}{ccll}
-\toprule
-\textbf{Fold} & \textbf{Youden threshold} & \textbf{SVM baseline $(TN,FP,FN,TP)$} & \textbf{Logistic regression $(TN,FP,FN,TP)$} \\
-\midrule
-1 & $0.1438$ & $(0,4,0,21)$ & $(0,4,0,21)$ \\
-2 & $-0.0878$ & $(0,3,1,20)$ & $(0,3,1,20)$ \\
-3 & $0.2548$ & $(0,3,1,20)$ & $(0,3,1,20)$ \\
-4 & $0.1606$ & $(0,3,0,21)$ & $(0,3,1,20)$ \\
-5 & $0.1931$ & $(0,4,0,20)$ & $(0,4,0,20)$ \\
-\bottomrule
-\end{tabular}
-}
-\end{table}
-
-\textbf{\textsf{Verification Note:}} Under Welch selection, the Youden thresholds were $0.1438$, $-0.0878$, $0.2548$, $0.1606$, and $0.1931$ for folds 1 to 5. Threshold tuning changes the held-out labels in fold 3 and fold 5, raising the aggregate MCC from $-0.0315 \pm 0.0432$ to $0.0512 \pm 0.2575$ while leaving ROC-AUC unchanged at $0.5882 \pm 0.1511$. Logistic regression differs from the SVM baseline only in fold 4's FN/TP counts and produces an independently recomputed MCC of $-0.0473 \pm 0.0432$.
-
-\medskip
-
-\textbf{\textsf{Interpretation of Table~\ref{tab:gse42568_extensions}:}} Under Welch selection, the extension variants retain the selected feature set and mostly predict the majority class. Notably, applying SMOTE to synthetically oversample the minority class during training did not rescue the model's performance. The SMOTE variant yielded $100\%$ Recall but $0\%$ Specificity, producing an MCC of exactly $0.0000$. This is an observed result rather than an explained one: the data show that the SVM reverted to predicting the majority class (cancer) for every test sample even with synthetically balanced training batches, but this analysis does not establish \emph{why} SMOTE failed to help --- describing the 6,706-feature high-dimensional space as having ``overpowered'' the synthetic minority samples would assert a specific mechanism that has not been tested here (for example, by comparing SMOTE's effect at smaller feature-set sizes). The result is reported without that mechanistic claim.
-
-Threshold tuning is the only variant in Table~\ref{tab:gse42568_extensions} that departs from this collapse: it raises Specificity to $13.33\%$ and mean MCC to $0.0512$, while ROC-AUC stays at $0.5882 \pm 0.1511$ (unchanged, since Youden threshold tuning does not alter the underlying decision scores that ROC-AUC is computed from). However, as the table reflects, when the true minority class is tiny ($n=17$), neither synthetic resampling (SMOTE) nor the alternative classifiers tested provide a stable remedy on this feature set. The apparent gain from threshold tuning should also be read cautiously given its own large standard deviation ($\pm 0.2575$) and the in-sample threshold-selection caveat raised in Chapter~3.
+\textbf{\textsf{Interpretation.}} Taken together with the SMOTE and alternative-classifier results discussed above, none of the 49 method--intervention combinations tested reaches an MCC that would indicate a reliable classifier on GSE42568. The least-bad result overall is the plain BH-FDR baseline; every intervention either leaves it roughly unchanged or makes it worse. This is treated as a substantive negative finding (Chapter~3, Chapter~6) rather than a methodological gap to be closed with more tuning: the imbalance and probe-to-sample ratio on this dataset appear to exceed what feature selection, resampling, threshold adjustment, or classifier substitution can individually or jointly overcome under the conditions tested here.
 
 \medskip
 
@@ -112,15 +144,15 @@ Table~\ref{tab:gse19804_svm_results} presents the 5-fold stratified cross-valida
 \toprule
 \textbf{Pipeline Path} & \textbf{Accuracy} & \textbf{Precision} & \textbf{Recall} & \textbf{F1-Score} & \textbf{MCC} & \textbf{ROC-AUC} \\
 \midrule
-\textbf{Path A (Baseline)} & $0.9500 \pm 0.068$ & $0.9513$ & $0.9500$ & $0.9500 \pm 0.068$ & $0.9013 \pm 0.137$ & $0.9778$ \\
+\textbf{Path A (Baseline)} & $0.9500 \pm 0.0685$ & $0.9513$ & $0.9500$ & $0.9500 \pm 0.0685$ & $0.9013 \pm 0.1371$ & $0.9778$ \\
 \midrule
-\textbf{Path B: Welch's $t$-test} & $0.9500 \pm 0.0685$ & $0.9500$ & $0.9500$ & $0.9500 \pm 0.0685$ & $0.9013 \pm 0.1371$ & $0.9806$ \\
-\textbf{Path B: ANOVA $F$-test} & $0.9500 \pm 0.0685$ & $0.9500$ & $0.9500$ & $0.9500 \pm 0.0685$ & $0.9013 \pm 0.1371$ & $0.9806$ \\
-\textbf{Path B: FDR-ranked} & $0.9500 \pm 0.0685$ & $0.9500$ & $0.9500$ & $0.9500 \pm 0.0685$ & $0.9013 \pm 0.1371$ & $0.9792$ \\
-\textbf{Path B: SVM-RFE} & $0.9250 \pm 0.0618$ & $0.9333$ & $0.9167$ & $0.9251 \pm 0.0623$ & $0.8554 \pm 0.1234$ & $0.9764$ \\
-\textbf{Path B: RF Importance} & $0.9500 \pm 0.0685$ & $0.9500$ & $0.9500$ & $0.9500 \pm 0.0685$ & $0.9013 \pm 0.1371$ & $0.9819$ \\
+\textbf{Path B: Welch's $t$-test} & $0.9500 \pm 0.0685$ & $0.9513$ & $0.9500$ & $0.9500 \pm 0.0685$ & $0.9013 \pm 0.1371$ & $0.9806$ \\
+\textbf{Path B: ANOVA $F$-test} & $0.9500 \pm 0.0685$ & $0.9513$ & $0.9500$ & $0.9500 \pm 0.0685$ & $0.9013 \pm 0.1371$ & $0.9806$ \\
+\textbf{Path B: FDR-ranked} & $0.9500 \pm 0.0685$ & $0.9513$ & $0.9500$ & $0.9500 \pm 0.0685$ & $0.9013 \pm 0.1371$ & $0.9792$ \\
+\textbf{Path B: SVM-RFE} & $0.9167 \pm 0.0659$ & $0.9113$ & $0.9333$ & $0.9183 \pm 0.0644$ & $0.8413 \pm 0.1288$ & $0.9736$ \\
+\textbf{Path B: RF Importance} & $0.9500 \pm 0.0685$ & $0.9513$ & $0.9500$ & $0.9500 \pm 0.0685$ & $0.9013 \pm 0.1371$ & $0.9833$ \\
 \textbf{Path B: XGBoost Importance} & $0.9750 \pm 0.0373$ & $0.9846$ & $0.9667$ & $0.9738 \pm 0.0401$ & $0.9530 \pm 0.0696$ & $0.9792$ \\
-\textbf{Path B: LASSO ($L_1$)} & $0.9500 \pm 0.0543$ & $0.9333$ & $0.9667$ & $0.9486 \pm 0.0562$ & $0.9012 \pm 0.1079$ & $0.9847$ \\
+\textbf{Path B: LASSO ($L_1$)} & $0.9583 \pm 0.0510$ & $0.9664$ & $0.9500$ & $0.9572 \pm 0.0533$ & $0.9185 \pm 0.1010$ & $0.9806$ \\
 \bottomrule
 \end{tabular}
 }
@@ -138,12 +170,50 @@ Table~\ref{tab:gse19804_svm_results} presents the 5-fold stratified cross-valida
 Figure~\ref{fig:gse19804_comparison} visualises the three headline metrics side by side for every pipeline. Because GSE19804 is class-balanced, accuracy, MCC, and ROC-AUC largely agree on which pipelines perform well, which is itself a useful sanity check that the balanced setting is behaving as expected.
 
 \begin{enumerate}
-    \item \textbf{Distinct SVM-RFE result:} the Chapter~4 full-dataset characterization of SVM-RFE retains 120 features (Table~\ref{tab:gse19804_probes}); the fold-local SVM-RFE selector evaluated here lowers Accuracy to $92.50\%$ and MCC to $0.8554$ relative to the Path A baseline, the only Path B method to do so.
-    \item \textbf{RF, XGBoost, and LASSO results:} RF matches the baseline classification metrics while improving ROC-AUC to $0.9819$; LASSO reaches ROC-AUC $0.9847$. Notably, \textbf{XGBoost importance} achieves the highest mean overall performance on GSE19804 across all configurations, reaching $97.50\%$ Accuracy and $0.9530$ MCC; because this is a single cross-validation run without a paired significance test between selectors, this is reported as the highest \emph{mean} score rather than as a proven superiority claim (see the discussion below).
-    \item \textbf{Equal scores here are not a red flag:} RF importance (333 features) matches Path A and the ANOVA filter (25,707 features) on Accuracy and MCC despite retaining under 1.3\% as many probes. Several very different feature subsets can each reach the same 5-fold accuracy/MCC values on this dataset; SVM-RFE's drop to $92.50\%$ accuracy shows that this is not simply an artefact of the evaluation (i.e., the selectors are not all producing identical results by construction). This pattern is consistent with GSE19804 containing a strong, easily captured class signal, but no class-separation diagnostics (e.g., dimensionality-reduction plots or margin analysis) were produced in this study to support a specific claim such as near-linear separability, so that stronger claim is not made here. The XGBoost-selected feature subset produced better classification performance in this experiment; no manifold-learning or geometric analysis was performed, so no claim is made about why the subset performs better geometrically.
+    \item \textbf{Distinct SVM-RFE result:} the Chapter~4 full-dataset characterization of SVM-RFE retains 120 features (Table~\ref{tab:gse19804_probes}); the fold-local SVM-RFE selector evaluated here lowers Accuracy to $91.67\%$ and MCC to $0.8413$ relative to the Path A baseline, the only Path B method to do so.
+    \item \textbf{RF, XGBoost, and LASSO results:} RF matches the baseline classification metrics while improving ROC-AUC to $0.9833$; LASSO's fold-local selection additionally improves Accuracy to $95.83\%$ and MCC to $0.9185$ relative to the Path A baseline. Notably, \textbf{XGBoost importance} achieves the highest mean overall performance on GSE19804 across all configurations, reaching $97.50\%$ Accuracy and $0.9530$ MCC; because this is a single cross-validation run without a paired significance test between selectors, this is reported as the highest \emph{mean} score rather than as a proven superiority claim (see the discussion below).
+    \item \textbf{Equal scores here are not a red flag:} RF importance (333 features) matches Path A and the ANOVA filter (25,707 features) on Accuracy and MCC despite retaining under 1.3\% as many probes. Several very different feature subsets can each reach the same 5-fold accuracy/MCC values on this dataset; SVM-RFE's drop to $91.67\%$ accuracy shows that this is not simply an artefact of the evaluation (i.e., the selectors are not all producing identical results by construction). This pattern is consistent with GSE19804 containing a strong, easily captured class signal, but no class-separation diagnostics (e.g., dimensionality-reduction plots or margin analysis) were produced in this study to support a specific claim such as near-linear separability, so that stronger claim is not made here. The XGBoost-selected feature subset produced better classification performance in this experiment; no manifold-learning or geometric analysis was performed, so no claim is made about why the subset performs better geometrically.
     \item \textbf{Statistical filter paths:} Welch, ANOVA, and BH-FDR retain large sets and have Accuracy $=95.00\%$; their MCC is $0.9013$.
     \item \textbf{Alternative Classifiers:} As a baseline check on classifier choice, substituting the linear SVM for an XGBoost classifier on the Welch's $t$-test selected features improved Accuracy slightly to $95.83\%$ and MCC to $0.9240$, demonstrating that non-linear ensemble methods can provide a marginal gain even on this highly separable balanced dataset.
+    \item \textbf{Feature-selection stability across folds:} the per-fold retained-feature counts and their cross-fold Jaccard overlap (Table~\ref{tab:gse19804_stability}) show that ``equal accuracy'' does not imply ``equal features.'' SVM-RFE retains an identical $96$ features in every fold (the deterministic $0.8 \times n_{\mathrm{samples}}$ bound), but its mean pairwise Jaccard overlap across folds is only $0.186$, and Random Forest importance is even less stable ($0.032$ mean overlap despite a stable accuracy of $95.00\%$) --- the folds are selecting substantially different probes while reaching the same classification score. The three filter methods are comparatively stable ($0.76$--$0.77$), and LASSO is intermediate ($0.28$) with a highly variable retained-feature count (from 11 to 195 features across the 5 folds). This instability is a caveat on any claim that a specific selected probe subset is ``the'' informative signal, even where the resulting accuracy is stable.
 \end{enumerate}
+
+\begin{table}[H]
+\centering
+\caption{Per-fold retained-feature counts and cross-fold selection stability on GSE19804. Stability is the mean pairwise Jaccard overlap of the selected-feature index sets across the 5 folds (1.0 = identical sets every fold; 0.0 = no overlap).}
+\label{tab:gse19804_stability}
+\begin{tabular}{lccccc}
+\toprule
+\textbf{Method} & \multicolumn{5}{c}{\textbf{Features retained per fold}} \\
+ & Fold 1 & Fold 2 & Fold 3 & Fold 4 & Fold 5 \\
+\midrule
+Welch $t$-test & 23,996 & 22,298 & 23,545 & 22,978 & 25,664 \\
+ANOVA & 24,013 & 22,315 & 23,570 & 23,004 & 25,690 \\
+BH-FDR-ranked & 19,880 & 17,719 & 19,062 & 18,678 & 21,288 \\
+SVM-RFE & 96 & 96 & 96 & 96 & 96 \\
+RF importance & 198 & 302 & 264 & 288 & 308 \\
+XGBoost importance & 30 & 49 & 32 & 51 & 53 \\
+LASSO & 12 & 11 & 34 & 195 & 14 \\
+\bottomrule
+\end{tabular}
+
+\medskip
+\begin{tabular}{lc}
+\toprule
+\textbf{Method} & \textbf{Mean pairwise Jaccard stability} \\
+\midrule
+Welch $t$-test & 0.770 \\
+ANOVA & 0.770 \\
+BH-FDR-ranked & 0.764 \\
+SVM-RFE & 0.186 \\
+RF importance & 0.032 \\
+XGBoost importance & 0.072 \\
+LASSO & 0.279 \\
+\bottomrule
+\end{tabular}
+\end{table}
+
+(A normal-approximation 95\% CI computed from only 5 fold values can exceed a metric's valid $[0,1]$ range, e.g. an accuracy CI upper bound of $1.035$; this is an artefact of the small-$n$ approximation, not evidence the true accuracy exceeds 100\%, and such bounds should be read as ``effectively saturated at or near the top of the scale'' rather than taken literally.)
 
 \section{Quantitative Results on GSE42568 (Imbalanced Dataset)}
 
@@ -159,46 +229,59 @@ Table~\ref{tab:gse42568_svm_results} reports performance on the imbalanced GSE42
 \toprule
 \textbf{Pipeline Path} & \textbf{Accuracy} & \textbf{Recall} & \textbf{Specificity} & \textbf{F1-Score} & \textbf{MCC} & \textbf{ROC-AUC} \\
 \midrule
-\textbf{Path A (Baseline)} & $0.8597 \pm 0.021$ & $1.0000$ & $0.0000 \pm 0.000$ & $0.9244 \pm 0.012$ & $\mathbf{0.0000 \pm 0.000}$ & $0.4569$ \\
+\textbf{Path A (Baseline)} & $0.8017 \pm 0.0541$ & $0.9324$ & $0.0000 \pm 0.0000$ & $0.8891 \pm 0.0332$ & $-0.0891 \pm 0.0571$ & $0.4387$ \\
 \midrule
-\textbf{Path B: Welch's $t$\text{-test}} & $0.8430 \pm 0.018$ & $0.9810$ & $0.0000 \pm 0.000$ & $0.9147 \pm 0.011$ & $-0.0315 \pm 0.043$ & $0.5882$ \\
-\textbf{Path B: ANOVA $F$\text{-test}} & $0.8517 \pm 0.034$ & $0.9905$ & $0.0000 \pm 0.000$ & $0.9196 \pm 0.020$ & $-0.0178 \pm 0.040$ & $0.5485$ \\
-\textbf{Path B: FDR-ranked} & $0.6153 \pm 0.272$ & $0.6462$ & $0.3833 \pm 0.371$ & $0.6659 \pm 0.378$ & $0.0269 \pm 0.044$ & $0.4760$ \\
-\textbf{Path B: SVM-RFE} & $0.5690 \pm 0.1337$ & $0.6148$ & $0.3000 \pm 0.1826$ & $0.7045 \pm 0.1069$ & $-0.0561 \pm 0.2122$ & $0.4158$ \\
-\textbf{Path B: RF Importance} & $0.8430 \pm 0.0181$ & $0.9714$ & $0.0500 \pm 0.1118$ & $0.9139 \pm 0.0108$ & $0.0232 \pm 0.1454$ & $0.5630$ \\
-\textbf{Path B: XGBoost Importance} & $0.7603 \pm 0.0949$ & $0.8743$ & $0.0667 \pm 0.1491$ & $0.8609 \pm 0.0581$ & $-0.0178 \pm 0.3195$ & $0.4888$ \\
-\textbf{Path B: LASSO ($L_1$)} & $0.8023 \pm 0.0824$ & $0.9238$ & $0.0500 \pm 0.1118$ & $0.8869 \pm 0.0535$ & $-0.0229 \pm 0.0850$ & $0.5469$ \\
+\textbf{Path B: Welch's $t$\text{-test}} & $0.8430 \pm 0.0181$ & $0.9810$ & $0.0000 \pm 0.0000$ & $0.9147 \pm 0.0105$ & $-0.0315 \pm 0.0432$ & $0.5664$ \\
+\textbf{Path B: ANOVA $F$\text{-test}} & $0.7603 \pm 0.0949$ & $0.8457$ & $0.2333 \pm 0.2236$ & $0.8558 \pm 0.0631$ & $+0.0727 \pm 0.2283$ & $0.5014$ \\
+\textbf{Path B: FDR-ranked} & $0.7767 \pm 0.0762$ & $0.8571$ & $0.3000 \pm 0.0456$ & $0.8663 \pm 0.0517$ & $\mathbf{+0.1922 \pm 0.1632}$ & $0.5381$ \\
+\textbf{Path B: SVM-RFE} & $0.7517 \pm 0.0439$ & $0.8467$ & $0.1667 \pm 0.2357$ & $0.8537 \pm 0.0283$ & $-0.0036 \pm 0.2074$ & $0.4834$ \\
+\textbf{Path B: RF Importance} & $0.7933 \pm 0.0780$ & $0.9138$ & $0.0500 \pm 0.1118$ & $0.8820 \pm 0.0502$ & $-0.0383 \pm 0.1375$ & $0.5727$ \\
+\textbf{Path B: XGBoost Importance} & $0.7603 \pm 0.0949$ & $0.8743$ & $0.0667 \pm 0.1491$ & $0.8609 \pm 0.0581$ & $-0.0178 \pm 0.3195$ & $0.4758$ \\
+\textbf{Path B: LASSO ($L_1$)} & $0.6943 \pm 0.0748$ & $0.7900$ & $0.1167 \pm 0.1624$ & $0.8134 \pm 0.0552$ & $-0.0888 \pm 0.0967$ & $0.5127$ \\
 \bottomrule
 \end{tabular}
 }
 \end{table}
 
+\begin{table}[H]
+\centering
+\caption{Per-fold retained-probe counts for the BH-FDR-ranked selector on GSE42568. When zero probes survive BH correction in a fold, the pipeline falls back to the single highest-F-score probe (Chapter~3) rather than leaving the fold unscored; this fallback fires in most folds here.}
+\label{tab:gse42568_fdr_folds}
+\begin{tabular}{lcccccc}
+\toprule
+& Fold 1 & Fold 2 & Fold 3 & Fold 4 & Fold 5 & Mean $\pm$ SD \\
+\midrule
+Probes retained & 1 & 3 & 1 & 2 & 1 & $1.6 \pm 0.9$ \\
+\bottomrule
+\end{tabular}
+\end{table}
+
 \begin{figure}[H]
 \centering
 \includegraphics[width=0.95\textwidth]{figures/fig_gse42568_comparison.png}
-\caption{Accuracy, MCC, and Specificity across the Path A baseline and all seven Path B pipelines on GSE42568. High accuracy alone is misleading: Path A, Welch, and ANOVA all score $0\%$ specificity, while RF importance and LASSO score $5\%$ specificity --- all five reflect majority-class collapse or near-collapse despite comparatively high accuracy.}
+\caption{Accuracy, MCC, and Specificity across the Path A baseline and all seven Path B pipelines on GSE42568. High accuracy alone is misleading: Path A, Welch, and SVM-RFE all score at or near $0\%$ specificity despite accuracy in the $75$--$84\%$ range; BH-FDR is the only method with both positive mean MCC and comparatively higher specificity ($30\%$).}
 \label{fig:gse42568_comparison}
 \end{figure}
 
 \subsection{Path A Majority-Class Collapse vs Path B Recovery}
 \label{sec:gse42568_discussion}
 
-As shown in Table~\ref{tab:gse42568_svm_results} and Figure~\ref{fig:gse42568_comparison}, the Path A baseline on GSE42568 collapsed to predicting the majority class in the presence of both extreme dimensionality ($p=54{,}675$) relative to the sample size ($n=121$) and severe class imbalance ($104$ cancer vs.\ $17$ normal, i.e.\ $86\%$ cancer); this experiment does not isolate which of the two factors is responsible; both are present simultaneously and either alone might already be sufficient to produce the collapse. The raw SVM predicted every sample as cancer, yielding an inflated accuracy ($85.97\%$) that at first glance looks competitive with the balanced-dataset results, but a \textbf{Recall/Sensitivity of $100\%$} paired with \textbf{Specificity $=0.0\%$} shows the model never once identified a normal sample. This is confirmed by \textbf{MCC $= 0.0000$}, consistent with a constant majority-class prediction (directly visible in the confusion matrix), and by the near-chance \textbf{ROC-AUC of $0.4569$}, both indicating the classifier has learned no discriminative signal at all. Accuracy alone would have concealed this failure entirely, which is precisely why MCC and specificity are reported as primary metrics for this dataset.
+As shown in Table~\ref{tab:gse42568_svm_results} and Figure~\ref{fig:gse42568_comparison}, the Path A baseline on GSE42568 collapsed toward the majority class in the presence of both extreme dimensionality ($p=54{,}675$) relative to the sample size ($n=121$) and severe class imbalance ($104$ cancer vs.\ $17$ normal, i.e.\ $86\%$ cancer); this experiment does not isolate which of the two factors is responsible, both are present simultaneously and either alone might already be sufficient to produce the collapse. The fold-local baseline predicted the majority (cancer) class overwhelmingly, yielding a middling accuracy ($80.17\%$) that nonetheless conceals a \textbf{Specificity of $0.0\%$}: the model never once identified a normal sample. This is confirmed by a \textbf{negative MCC of $-0.0891$} --- worse than chance-level association, not merely absent association --- and by the near-chance \textbf{ROC-AUC of $0.4387$}, both indicating the classifier has learned no usable discriminative signal. Accuracy alone would have concealed this failure entirely, which is precisely why MCC and specificity are reported as primary metrics for this dataset.
 
-Applying Welch $t$-test selection inside the CV folds (\texttt{path\_b\_filter\_ttest}) does not break the majority-class collapse: accuracy is $84.30\%$, but Specificity remains $0\%$ and MCC is $-0.0315$.
+Applying Welch $t$-test selection inside the CV folds does not break the majority-class collapse: accuracy rises slightly to $84.30\%$, but Specificity remains exactly $0\%$ and MCC is still negative ($-0.0315$).
 
-The BH-FDR-ranked selector is the only Path B method that retains a very small feature set: two probes survive BH correction, yielding mean MCC $=+0.0269$ and mean Specificity $=38.33\%$ (with a very large standard deviation of $0.371$, reflecting the small per-fold minority count discussed in Chapter~3). Notably, XGBoost importance reduces the majority-class bias compared to SVM-RFE (improving Accuracy from 56.9\% to 76.0\%), though its MCC remains near zero at $-0.0178$. Overall, no evaluated method on GSE42568 produced a reliable classifier: the larger $p$-qualified sets (Welch, ANOVA) collapse to near-total majority-class prediction, while the embedded and wrapper methods change the balance of errors somewhat without achieving strong discrimination, and the two-probe BH-FDR set has the least-bad MCC among them, at a value still close to zero.
+The BH-FDR-ranked selector is the only Path B method with a clearly positive mean MCC: it retains a mean of just $1.6$ probes per fold (Table~\ref{tab:gse42568_fdr_folds}), yielding MCC $=+0.1922$ and Specificity $=30.0\%$. In most folds, zero probes actually survive BH correction, and the pipeline's zero-features fallback (Chapter~3) retains the single highest-F-score probe instead; the fact that this near-minimal, mostly-single-probe selection outperforms every other method and every tuning intervention tested (Section~\ref{sec:imbalance_extensions}) is itself informative: it suggests that on this dataset, adding almost any additional probe beyond the one or two most discriminative ones adds more noise than signal to a linear SVM. ANOVA is the next-best method (MCC $=+0.0727$, Specificity $=23.3\%$), while Welch, SVM-RFE, RF importance, XGBoost importance, and LASSO all show negative or near-zero MCC. Overall, no evaluated method on GSE42568 produced a reliable classifier: the larger $p$-qualified sets (Welch, ANOVA at their full retained size) and most of the wrapper/embedded methods remain close to majority-class prediction, while the aggressively small BH-FDR set is the only configuration to clear a positive, if still weak, MCC.
 
-Taken together, the BH-FDR selector has the highest mean MCC among the Path B variants on GSE42568 ($+0.0269$), but this value remains very close to chance and highly variable across folds; it should not be described as a successful or strong classifier. XGBoost importance is comparatively the most stable of the embedded/wrapper methods on this dataset, but none of the seven feature-selection methods evaluated produced a classifier with both acceptable sensitivity and specificity on GSE42568. The central finding for this dataset is therefore negative: severe class imbalance combined with a minority class of only 17 samples produced unstable, unreliable classification performance under every configuration tested here, rather than any one configuration succeeding.
+Taken together, the BH-FDR selector has the highest mean MCC among the Path B variants on GSE42568 ($+0.1922$), and none of the 49 tuning/intervention combinations tested in Section~\ref{sec:imbalance_extensions} (SMOTE, threshold tuning, $C$ tuning, or alternative classifiers, across all seven feature-selection methods) improves on it. This value is still far from a clinically reliable classifier and remains variable across folds (Table~\ref{tab:gse42568_fdr_folds} shows the retained probe identity itself changes from fold to fold). The central finding for this dataset is therefore negative: severe class imbalance combined with a minority class of only 17 samples produced unreliable classification performance under essentially every configuration tested here, with aggressive-to-the-point-of-near-single-probe feature selection being the only approach that got closer to a working classifier than to random guessing.
 
 \section{Discussion and Summary}
 
 The empirical evaluation leads to four major findings:
 \begin{enumerate}
-    \item \textbf{On the Balanced Dataset (GSE19804):} five of the seven Path B methods (Welch, ANOVA, BH-FDR, RF importance, LASSO) match the Path A classifier at Accuracy $=95.00\%$ and MCC $=0.9013$, with ROC-AUC differing only slightly ($0.9792$--$0.9847$); SVM-RFE is lower on both Accuracy and MCC ($92.50\%$, $0.8554$). XGBoost importance achieves the highest \emph{mean} Accuracy and MCC among all configurations ($97.5\%$, $0.9530$); given cross-validation variability and the absence of a paired statistical comparison between selectors, this is reported as the highest mean score rather than as a proven superiority claim.
-    \item \textbf{On the Imbalanced Dataset (GSE42568):} the Welch, ANOVA, SVM-RFE, and XGBoost paths all have Specificity at or near $0\%$ and negative or near-zero MCC; RF importance and LASSO reach only $5\%$ specificity. The two-probe BH-FDR path has the highest mean MCC ($+0.0269$) but remains close to chance, and no method achieved reliable balanced discrimination on this dataset.
-    \item \textbf{Selection-policy effect:} larger nominally significant probe sets tend toward majority-class prediction, while strict BH-FDR filtering retains only two probes and shows the best (though still weak) Path B balance among the methods tested. The embedded XGBoost-importance method shows signs of mitigating the collapse relative to SVM-RFE but still performs poorly against the severe class imbalance.
-    \item \textbf{Leakage Prevention:} embedding every data-dependent step strictly within the cross-validation folds via a single scikit-learn \texttt{Pipeline} is what allows the majority-class collapse on GSE42568 to be detected rather than masked: had feature selection or scaling been fitted on the full dataset before splitting, the resulting optimistic bias could have concealed this failure mode. This point should be read together with Chapter~3's confirmation that scaling, threshold tuning, and every other data-dependent step are fold-local, not feature selection alone.
+    \item \textbf{On the Balanced Dataset (GSE19804):} four of the seven Path B methods (Welch, ANOVA, BH-FDR, RF importance) match the Path A classifier exactly at Accuracy $=95.00\%$ and MCC $=0.9013$, with ROC-AUC differing only slightly ($0.9792$--$0.9833$); SVM-RFE is lower on both Accuracy and MCC ($91.67\%$, $0.8413$), while LASSO is slightly higher ($95.83\%$, $0.9185$). XGBoost importance achieves the highest \emph{mean} Accuracy and MCC among all configurations ($97.5\%$, $0.9530$); given cross-validation variability and the absence of a paired statistical comparison between selectors, this is reported as the highest mean score rather than as a proven superiority claim. Cross-fold selection stability varies sharply by method (Table~\ref{tab:gse19804_stability}): the filter methods are comparatively stable, while SVM-RFE and RF importance select substantially different probes fold-to-fold despite matching or near-matching accuracy.
+    \item \textbf{On the Imbalanced Dataset (GSE42568):} Path A and the Welch and SVM-RFE paths all have Specificity at or near $0\%$ and negative MCC; RF importance, XGBoost importance, and LASSO are likewise negative or near-zero. Only BH-FDR ($+0.1922$ MCC, $1.6$ mean retained probes) and ANOVA ($+0.0727$ MCC) achieve positive mean MCC, and none of 49 tested tuning/resampling/alternative-classifier interventions improves on the untuned BH-FDR result. No method achieved reliable balanced discrimination on this dataset.
+    \item \textbf{Selection-policy effect:} larger nominally significant probe sets tend toward majority-class prediction, while the most extreme dimensionality reduction (BH-FDR, often down to a single fallback probe per fold) shows the best, though still weak, Path B balance among the methods tested. Applying SMOTE \emph{before} feature selection was found to inflate the apparent number of significant probes substantially (Table~\ref{tab:gse42568_smote_inflation}) without improving MCC for any filter method, which is reported as a methodological caveat on that combination rather than a genuine effect of class balancing.
+    \item \textbf{Leakage Prevention:} embedding every data-dependent step strictly within the cross-validation folds is what allows the majority-class collapse and BH-FDR's zero-survivor folds on GSE42568 to be detected and handled explicitly rather than masked: had feature selection or scaling been fitted on the full dataset before splitting, the resulting optimistic bias could have concealed these failure modes. This point should be read together with Chapter~3's confirmation that scaling, threshold tuning, and every other data-dependent step are fold-local, not feature selection alone.
 \end{enumerate}
 
 \subsection{Limitations}
@@ -207,11 +290,11 @@ The empirical evaluation leads to four major findings:
 The principal limitations of the imbalanced GSE42568 analysis are:
 
 \begin{enumerate}
-    \item \textbf{Extension results:} Threshold tuning improved mean MCC to $0.0512 \pm 0.2575$ and mean Specificity to $13.33\%$, while ROC-AUC remained $0.5882 \pm 0.1511$; this result carries the in-sample threshold-selection caveat noted in Chapter~3. Alternate classifiers including Logistic Regression, Random Forest, and XGBoost all failed to correct the majority-class bias, yielding specificity of $0.0\%$ and negative or zero MCCs.
+    \item \textbf{Extension results:} across all seven feature-selection methods, threshold tuning, $C$ tuning, SMOTE, and three alternative classifiers were tested (Section~\ref{sec:imbalance_extensions}); none improved on the plain BH-FDR baseline's MCC of $+0.1922$, and substituting Random Forest as the classifier collapsed every method to an identical majority-class prediction regardless of feature set. Several individual interventions carry their own caveats: threshold tuning's gains rest on the in-sample-selection safeguard described in Chapter~3, and pre-selection SMOTE was found to inflate apparent feature significance rather than genuinely improve discrimination (Table~\ref{tab:gse42568_smote_inflation}).
 
-    \item \textbf{Scope of extensions:} The SMOTE, threshold tuning and $C$ tuning experiments (Table~\ref{tab:gse42568_extensions}) were evaluated only on the Welch $t$-test feature-selection path. The other six Path B methods (ANOVA, BH-FDR, SVM-RFE, RF importance, XGBoost importance, LASSO) were not extended in this way, so it is unknown whether these tuning strategies would improve their performance on GSE42568.
+    \item \textbf{Fold-to-fold instability of the best-performing method:} BH-FDR's retained probe count (Table~\ref{tab:gse42568_fdr_folds}) and identity change from fold to fold, and in most folds the selection reduces to a single, different fallback probe. This means the $+0.1922$ MCC result should be read as evidence that near-total dimensionality reduction is the best \emph{strategy} tested on this dataset, not as evidence that a specific, stable, biologically meaningful two-probe (or one-probe) signature has been identified.
 
-    \item \textbf{Fold-count reporting:} the fold-by-fold retained-feature counts for the fold-local selectors (particularly SVM-RFE and BH-FDR) are not individually reported in this chapter; only the full-dataset characterization from Chapter~4 is shown. Reporting the actual per-fold counts (or their mean $\pm$ standard deviation) would allow the reader to confirm, for example, that the BH-FDR selector is retaining a similarly small number of probes in every fold rather than being dominated by one fold, and is left as an outstanding item for the final submission.
+    \item \textbf{Small-minority-class variance:} with only 17 normal samples split across 5 folds ($\approx$3--4 per fold), specificity and MCC estimates on GSE42568 carry very large standard deviations (Chapter~3), and a 95\% confidence interval computed from only 5 fold values can itself exceed a metric's valid range at this sample size, as noted for GSE19804 in Section~\ref{sec:imbalance_extensions}'s companion analysis. These estimates should be read as indicating a wide and unreliable range of plausible performance, not a precise point estimate.
 \end{enumerate}
 
 Despite these limitations, the results demonstrate the failure of the full-dimensional baseline (Path A) on GSE42568 and show that feature selection changes the balance between sensitivity and specificity, without any tested configuration reaching a reliable classifier for this severely imbalanced, small-minority-class dataset.

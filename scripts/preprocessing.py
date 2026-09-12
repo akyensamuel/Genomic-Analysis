@@ -43,7 +43,7 @@ class GenomicDataProcessor:
     """Centralised preprocessing pipeline for high-dimensional gene expression data."""
 
     # ------------------------------------------------------------------
-    # Dataset registry — single source of truth for the whole project
+    # Dataset registry - single source of truth for the whole project
     # ------------------------------------------------------------------
     DATASET_CONFIG: dict = {
         "GSE42568": {
@@ -119,7 +119,7 @@ class GenomicDataProcessor:
             logger.info(f"Dataset already cached: {filepath}")
             return filepath
 
-        logger.info(f"Downloading {self.dataset_name} from GEO FTP …")
+        logger.info(f"Downloading {self.dataset_name} from GEO FTP ...")
         try:
             urllib.request.urlretrieve(config["url"], filepath)
             logger.info(f"Download complete: {filepath}")
@@ -134,7 +134,7 @@ class GenomicDataProcessor:
     # ------------------------------------------------------------------
     def load_data(self) -> tuple[pd.DataFrame, np.ndarray]:
         """Load the GEO series matrix, transpose, and create the label vector."""
-        logger.info(f"Loading {self.dataset_name} …")
+        logger.info(f"Loading {self.dataset_name} ...")
         filepath = self.download_dataset()
         config = self.DATASET_CONFIG[self.dataset_name]
 
@@ -163,7 +163,7 @@ class GenomicDataProcessor:
         if self.X_raw is None:
             raise ValueError("Run load_data() first.")
 
-        logger.info("Applying log2(x + 1) transformation …")
+        logger.info("Applying log2(x + 1) transformation ...")
         self.X_log = np.log2(self.X_raw + 1)
         self.X_raw = None  # free memory
         return self.X_log
@@ -173,7 +173,7 @@ class GenomicDataProcessor:
         if self.X_log is None:
             raise ValueError("Run apply_log_transformation() first.")
 
-        logger.info("Applying Z-score standardisation …")
+        logger.info("Applying Z-score standardisation ...")
         scaler = StandardScaler()
         X_scaled_arr = scaler.fit_transform(self.X_log)
 
@@ -192,7 +192,7 @@ class GenomicDataProcessor:
         return self.X_scaled
 
     def preprocess_complete(self) -> tuple[pd.DataFrame, np.ndarray]:
-        """Run the full pipeline: load → log-transform → standardise."""
+        """Run the full pipeline: load -> log-transform -> standardise."""
         logger.info("=" * 60)
         logger.info(f"PREPROCESSING PIPELINE: {self.dataset_name}")
         logger.info("=" * 60)
@@ -245,7 +245,7 @@ class GenomicDataProcessor:
         return profile
 
     # ------------------------------------------------------------------
-    # Persistence — .npy cache (used by svm_classifier)
+    # Persistence - .npy cache (used by svm_classifier)
     # ------------------------------------------------------------------
     def save_preprocessed_data(self) -> None:
         """
@@ -262,7 +262,7 @@ class GenomicDataProcessor:
         if self.X_scaled is None:
             raise ValueError("No scaled data to save. Run preprocess_complete() first.")
 
-        logger.info(f"Saving preprocessed cache for {self.dataset_name} …")
+        logger.info(f"Saving preprocessed cache for {self.dataset_name} ...")
 
         out_dir = self.preprocessed_dir / self.dataset_name
         out_dir.mkdir(parents=True, exist_ok=True)
@@ -291,7 +291,7 @@ class GenomicDataProcessor:
         load_log_stage_data() instead and fit StandardScaler fold-locally
         (see svm_classifier.py, which does exactly this).
         """
-        logger.info(f"Loading preprocessed cache for {self.dataset_name} …")
+        logger.info(f"Loading preprocessed cache for {self.dataset_name} ...")
 
         cache_dir = self.preprocessed_dir / self.dataset_name
         X_path     = cache_dir / f"{self.dataset_name}_X_scaled.npy"
@@ -302,7 +302,7 @@ class GenomicDataProcessor:
         missing = [p for p in (X_path, y_path, cols_path, index_path) if not p.exists()]
         if missing:
             raise FileNotFoundError(
-                f"Cache incomplete — missing file(s): {[str(m) for m in missing]}"
+                f"Cache incomplete - missing file(s): {[str(m) for m in missing]}"
             )
 
         self.y = np.load(y_path)
@@ -316,7 +316,7 @@ class GenomicDataProcessor:
         return self.X_scaled, self.y
 
     # ------------------------------------------------------------------
-    # Persistence — LOG-STAGE cache (pre-scaling; used by svm_classifier.py
+    # Persistence - LOG-STAGE cache (pre-scaling; used by svm_classifier.py
     # for cross-validated evaluation, so that standardization can be fit
     # fold-locally instead of on the full dataset)
     # ------------------------------------------------------------------
@@ -334,7 +334,7 @@ class GenomicDataProcessor:
                 "and save before apply_standardization() frees self.X_log."
             )
 
-        logger.info(f"Saving log-stage cache for {self.dataset_name} …")
+        logger.info(f"Saving log-stage cache for {self.dataset_name} ...")
 
         out_dir = self.preprocessed_dir / self.dataset_name
         out_dir.mkdir(parents=True, exist_ok=True)
@@ -351,7 +351,7 @@ class GenomicDataProcessor:
         Load the log-stage (pre-standardization) cache written by
         save_log_stage_data(). Raises FileNotFoundError if missing.
         """
-        logger.info(f"Loading log-stage cache for {self.dataset_name} …")
+        logger.info(f"Loading log-stage cache for {self.dataset_name} ...")
 
         cache_dir = self.preprocessed_dir / self.dataset_name
         X_path     = cache_dir / f"{self.dataset_name}_X_log.npy"
@@ -362,7 +362,7 @@ class GenomicDataProcessor:
         missing = [p for p in (X_path, y_path, cols_path, index_path) if not p.exists()]
         if missing:
             raise FileNotFoundError(
-                f"Log-stage cache incomplete — missing file(s): {[str(m) for m in missing]}"
+                f"Log-stage cache incomplete - missing file(s): {[str(m) for m in missing]}"
             )
 
         y = np.load(y_path)
@@ -376,7 +376,7 @@ class GenomicDataProcessor:
         return X_log, y
 
     # ------------------------------------------------------------------
-    # Persistence — CSV export (used by feature_selection standalone mode)
+    # Persistence - CSV export (used by feature_selection standalone mode)
     # ------------------------------------------------------------------
     def export_csv(self, out_path: Path | None = None) -> Path:
         """
