@@ -169,7 +169,7 @@ class FeatureSelector(BaseEstimator, TransformerMixin):
     # Filter methods
     # ------------------------------------------------------------------
     def _fit_ttest(self, X: np.ndarray, y: np.ndarray) -> None:
-        logger.info("[filter_ttest]  Welch's Independent Two-Sample T-Test …")
+        logger.info("[filter_ttest]  Welch's Independent Two-Sample T-Test ...")
         classes = np.unique(y)
         if len(classes) != 2:
             raise ValueError("filter_ttest requires exactly 2 classes.")
@@ -187,10 +187,10 @@ class FeatureSelector(BaseEstimator, TransformerMixin):
             order = np.argsort(p_values)
             self.selected_features = order[: self.n_features]
         self.feature_scores = p_values
-        logger.info(f"  → {len(self.selected_features)} features selected ({self.selection_rule})")
+        logger.info(f"  -> {len(self.selected_features)} features selected ({self.selection_rule})")
 
     def _fit_anova(self, X: np.ndarray, y: np.ndarray) -> None:
-        logger.info("[filter_anova]  ANOVA F-Test …")
+        logger.info("[filter_anova]  ANOVA F-Test ...")
         # Compute F-statistic and associated p-values
         F, p_values = f_classif(X, y)
         p_values = np.nan_to_num(p_values, nan=1.0, posinf=1.0, neginf=1.0)
@@ -207,7 +207,7 @@ class FeatureSelector(BaseEstimator, TransformerMixin):
             sel.fit(X, y)
             self.selected_features = sel.get_support(indices=True)
         self.feature_scores = F
-        logger.info(f"  → {len(self.selected_features)} features selected ({self.selection_rule})")
+        logger.info(f"  -> {len(self.selected_features)} features selected ({self.selection_rule})")
 
     def _compute_cohens_d(self, X: np.ndarray, y: np.ndarray) -> np.ndarray:
         """
@@ -258,7 +258,7 @@ class FeatureSelector(BaseEstimator, TransformerMixin):
         5. Average ranks with equal weights (1/3 each).
         6. Retain every feature that passes the BH-FDR threshold.
         """
-        logger.info("[filter_fdr_ranked]  FDR-ranked (BH + F-score + MI + Effect Size) …")
+        logger.info("[filter_fdr_ranked]  FDR-ranked (BH + F-score + MI + Effect Size) ...")
         
         # Step 1: Compute adjusted p-values and filter by FDR < 0.05
         F, p_values = f_classif(X, y)
@@ -273,16 +273,31 @@ class FeatureSelector(BaseEstimator, TransformerMixin):
         survivor_indices = np.where(fdr_mask)[0]
         
         if survivor_indices.size == 0:
+            # FIX: previously returned an empty feature set here, which
+            # crashed downstream (SVC.fit on a (n_samples, 0) array raises
+            # ValueError) whenever a cross-validation training fold was too
+            # small/imbalanced for any probe to survive BH-FDR correction.
+            # This is a real and informative result in its own right for
+            # severely imbalanced datasets like GSE42568 (see the thesis
+            # discussion of comment #21/#41), but a fold that selects zero
+            # features cannot be scored at all. Falling back to the single
+            # most significant probe by raw F-score (pre-correction) keeps
+            # the fold usable while making the near-total loss of signal
+            # explicit in the logs and in self.selection_rule, rather than
+            # silently padding the result with a threshold change.
+            fallback_idx = int(np.argmax(F))
             logger.warning(
-                "[filter_fdr_ranked] No features survived FDR <= 0.05"
+                "[filter_fdr_ranked] No features survived FDR <= 0.05 in this "
+                "fold; falling back to the single highest-F-score probe "
+                f"(index {fallback_idx}) so the fold can still be scored."
             )
-            self.selection_rule = "fdr<=0.05 (none)"
-            self.selected_features = np.array([], dtype=int)
+            self.selection_rule = "fdr<=0.05 (none; fallback to top-1 by F-score)"
+            self.selected_features = np.array([fallback_idx], dtype=int)
             self.feature_scores = F
-            logger.info(f"  → {len(self.selected_features)} features selected ({self.selection_rule})")
+            logger.info(f"  -> {len(self.selected_features)} features selected ({self.selection_rule})")
             return
         
-        logger.info(f"  FDR < 0.05: {survivor_indices.size} features passed; ranking …")
+        logger.info(f"  FDR < 0.05: {survivor_indices.size} features passed; ranking...")
         
         # Step 2: Compute three ranking metrics on the survivors
         X_survivors = X[:, survivor_indices]
@@ -308,7 +323,7 @@ class FeatureSelector(BaseEstimator, TransformerMixin):
         
         self.feature_scores = F
         self.selection_rule = "fdr_ranked(all_bh<=0.05)"
-        logger.info(f"  → {len(self.selected_features)} features selected ({self.selection_rule})")
+        logger.info(f"  -> {len(self.selected_features)} features selected ({self.selection_rule})")
 
     # ------------------------------------------------------------------
     # Wrapper helpers
@@ -348,9 +363,9 @@ class FeatureSelector(BaseEstimator, TransformerMixin):
     # Wrapper methods
     # ------------------------------------------------------------------
     def _fit_wrapper_svm(self, X: np.ndarray, y: np.ndarray) -> None:
-        logger.info("[wrapper_svm]  SVM-RFE (with ANOVA pre-filter) …")
+        logger.info("[wrapper_svm]  SVM-RFE (with ANOVA pre-filter) ...")
         X_pre, pre_idx = self._prefilter(X, y)
-        logger.info(f"  Pre-filtered to {X_pre.shape[1]} features, running RFE …")
+        logger.info(f"  Pre-filtered to {X_pre.shape[1]} features, running RFE ...")
         svc = LinearSVC(
             C=0.01, penalty="l2", dual=True,
             max_iter=2000, random_state=42, class_weight="balanced",
@@ -366,12 +381,12 @@ class FeatureSelector(BaseEstimator, TransformerMixin):
         rfe.fit(X_pre, y)
         self.selected_features = pre_idx[rfe.support_]
         self.selection_rule = f"svm_rfe_until_n_samples({target_features})"
-        logger.info(f"  → {len(self.selected_features)} features selected")
+        logger.info(f"  -> {len(self.selected_features)} features selected")
 
     def _fit_wrapper_rf(self, X: np.ndarray, y: np.ndarray) -> None:
-        logger.info("[wrapper_rf]  RandomForest importance prefilter (with ANOVA pre-filter) …")
+        logger.info("[wrapper_rf]  RandomForest importance prefilter (with ANOVA pre-filter) ...")
         X_pre, pre_idx = self._prefilter(X, y)
-        logger.info(f"  Pre-filtered to {X_pre.shape[1]} features, fitting RandomForest …")
+        logger.info(f"  Pre-filtered to {X_pre.shape[1]} features, fitting RandomForest ...")
         rf = RandomForestClassifier(
             n_estimators=80, random_state=42,
             # joblib's process-parallel expression evaluator is incompatible
@@ -393,15 +408,15 @@ class FeatureSelector(BaseEstimator, TransformerMixin):
             # keep them sorted for downstream reproducibility
             self.selected_features = np.sort(selected_orig_idx)
             self.feature_scores = importances
-            logger.info(f"  → {len(self.selected_features)} features selected ({self.selection_rule})")
+            logger.info(f"  -> {len(self.selected_features)} features selected ({self.selection_rule})")
         except Exception as exc:
             logger.exception("  RandomForest importance failed")
             raise RuntimeError("RandomForest importance selection failed") from exc
 
     def _fit_wrapper_xgb(self, X: np.ndarray, y: np.ndarray) -> None:
-        logger.info("[wrapper_xgb]  XGBoost importance prefilter (with ANOVA pre-filter) …")
+        logger.info("[wrapper_xgb]  XGBoost importance prefilter (with ANOVA pre-filter) ...")
         X_pre, pre_idx = self._prefilter(X, y)
-        logger.info(f"  Pre-filtered to {X_pre.shape[1]} features, fitting XGBoost …")
+        logger.info(f"  Pre-filtered to {X_pre.shape[1]} features, fitting XGBoost ...")
         
         n_pos = np.sum(y == 1)
         n_neg = np.sum(y == 0)
@@ -430,12 +445,12 @@ class FeatureSelector(BaseEstimator, TransformerMixin):
             selected_orig_idx = pre_idx[keep]
             self.selected_features = np.sort(selected_orig_idx)
             self.feature_scores = importances
-            logger.info(f"  → {len(self.selected_features)} features selected ({self.selection_rule})")
+            logger.info(f"  -> {len(self.selected_features)} features selected ({self.selection_rule})")
         except Exception as exc:
             logger.exception("  XGBoost importance failed")
             raise RuntimeError("XGBoost importance selection failed") from exc
 
-    # Note: greedy forward/backward wrapper methods removed — they were
+    # Note: greedy forward/backward wrapper methods removed - they were
     # computationally prohibitive on high-dimensional genomic data and
     # have been replaced by pre-filtered RFE and RF importance strategies.
 
@@ -443,7 +458,7 @@ class FeatureSelector(BaseEstimator, TransformerMixin):
     # Embedded methods
     # ------------------------------------------------------------------
     def _fit_embedded_lasso(self, X: np.ndarray, y: np.ndarray) -> None:
-        logger.info("[embedded_lasso]  LASSO (L1 Logistic Regression) …")
+        logger.info("[embedded_lasso]  LASSO (L1 Logistic Regression) ...")
         X_pre, pre_idx = self._prefilter(X, y)
         logger.info(f"  Pre-filtered to {X_pre.shape[1]} features for LASSO")
         # Use cross-validated LogisticRegressionCV to pick regularization strength
@@ -464,7 +479,7 @@ class FeatureSelector(BaseEstimator, TransformerMixin):
             )
             lrcv.fit(X_pre, y)
             coefs = np.abs(lrcv.coef_[0])
-            # Report chosen C (inverse reg strength) — note that lambda ~ 1/C
+            # Report chosen C (inverse reg strength) - note that lambda ~ 1/C
             try:
                 chosen_C = lrcv.C_[0]
             except Exception:
@@ -533,7 +548,7 @@ class FeatureSelector(BaseEstimator, TransformerMixin):
             self.selection_rule = f"lasso_nonzero_coefficients({len(non_zero)})"
 
         self.feature_scores = coefs
-        logger.info(f"  → {len(self.selected_features)} features selected ({self.selection_rule})")
+        logger.info(f"  -> {len(self.selected_features)} features selected ({self.selection_rule})")
 
 
 # ---------------------------------------------------------------------------
@@ -547,7 +562,7 @@ class FeatureSelectionPipeline:
     svm_classifier imports it directly so the two files never drift apart.
     """
 
-    # Single source of truth for valid method names — imported by svm_classifier
+    # Single source of truth for valid method names - imported by svm_classifier
     ALL_METHODS: list[str] = list(FeatureSelector.DISPLAY_NAMES.keys())
 
     def __init__(
@@ -577,7 +592,7 @@ class FeatureSelectionPipeline:
     def fit_all(self, X: np.ndarray, y: np.ndarray) -> dict:
         """Fit all selectors; returns a results dict."""
         logger.info("=" * 65)
-        logger.info("FEATURE SELECTION PIPELINE — fitting all methods")
+        logger.info("FEATURE SELECTION PIPELINE - fitting all methods")
         logger.info("=" * 65)
         results: dict = {}
         for method, selector in self.selectors.items():
@@ -603,7 +618,7 @@ def _locate_dataset(dataset_arg: str, script_dir: Path) -> Path:
     Accepted forms
     --------------
     1. An absolute or relative path to an existing .csv / .tsv file.
-    2. A dataset name — looks in these locations in order:
+    2. A dataset name - looks in these locations in order:
          <project>/preprocessed_datasets/<name>/<name>.csv   ← export_csv() output
          <project>/preprocessed_datasets/<name>.csv
          <project>/datasets/<name>/<name>.csv
@@ -622,7 +637,7 @@ def _locate_dataset(dataset_arg: str, script_dir: Path) -> Path:
     ]
     for candidate in candidates:
         if candidate.exists():
-            logger.info(f"Resolved '{dataset_arg}' → {candidate}")
+            logger.info(f"Resolved '{dataset_arg}' -> {candidate}")
             return candidate.resolve()
 
     raise FileNotFoundError(
@@ -689,7 +704,7 @@ def _print_console_summary(
 ) -> None:
     w = 72
     print("\n" + "=" * w)
-    print("FEATURE SELECTION — RESULTS SUMMARY")
+    print("FEATURE SELECTION - RESULTS SUMMARY")
     print("=" * w)
     print(f"Original feature space: {n_original} features\n")
     print(f"{'Method':<22} {'Display Name':<32} {'Selected':>8} {'Reduction':>10}")
@@ -727,7 +742,7 @@ def save_results(
     feature_selection_report_<dataset>_<ts>.txt
         Human-readable text report.
     selected_features_<dataset>_<ts>/
-        <method>_selected_features.txt   — one file per method.
+        <method>_selected_features.txt   - one file per method.
     """
     ts = datetime.now().strftime("%Y%m%d_%H%M%S")
     out_dir = results_base_dir / dataset_name
@@ -889,7 +904,7 @@ def save_results(
                 plot_path = out_dir / f"lasso_nonzero_vs_C_{dataset_name}_{ts}.png"
                 plt.savefig(plot_path, bbox_inches="tight")
                 plt.close()
-                print(f"  ✓  LASSO diagnostic plot →  {plot_path.name}")
+                print(f"  ✓  LASSO diagnostic plot ->  {plot_path.name}")
             except Exception as exc:
                 print(f"  !  Could not create LASSO diagnostic plot: {exc}")
 
@@ -986,7 +1001,7 @@ def _build_parser() -> argparse.ArgumentParser:
 # Entry point
 # ---------------------------------------------------------------------------
 def main() -> int:
-    # Configure logging here — not at module level — so importing this file
+    # Configure logging here - not at module level - so importing this file
     # never reconfigures the root logger when used as a library.
     logging.basicConfig(
         level=logging.INFO,
@@ -997,7 +1012,7 @@ def main() -> int:
     parser = _build_parser()
     args = parser.parse_args()
 
-    script_dir = Path(__file__).resolve().parent  # …/scripts/
+    script_dir = Path(__file__).resolve().parent  # .../scripts/
 
     try:
         csv_path = _locate_dataset(args.dataset, script_dir)
@@ -1049,7 +1064,7 @@ def main() -> int:
 
     _print_console_summary(results, X.shape[1], pipeline.selectors)
 
-    print("Saving results …")
+    print("Saving results ...")
     out_dir = save_results(
         pipeline=pipeline,
         results=results,

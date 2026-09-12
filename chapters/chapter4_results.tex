@@ -142,8 +142,7 @@ The counts on GSE42568 differ markedly by statistical threshold, highlighting th
 
 \section{Cross-Dataset Comparison and Summary}
 
-Table~\ref{tab:cross_dataset_consensus} summarises the retained-probe counts among the \emph{filter} methods only (Welch $t$-test, ANOVA, BH-FDR) across both datasets. It is restricted to filter methods because, across all seven methods evaluated, the smallest retained set on GSE19804 is in fact produced by the XGBoost embedded selector (46 probes, Table~\ref{tab:gse19804_probes}), not by BH-FDR; an earlier version of this table incorrectly reported 21,858 (BH-FDR) as the overall smallest retained set across all methods.
-
+Table~\ref{tab:cross_dataset_consensus} summarises the retained-probe counts among the \emph{filter} methods only (Welch $t$-test, ANOVA, BH-FDR) across both datasets. It is restricted to filter methods because, across all seven methods evaluated, the smallest retained set on GSE19804 is in fact produced by the XGBoost embedded selector (46 probes, Table~\ref{tab:gse19804_probes}), not by BH-FDR.
 \begin{table}[H]
 \centering
 \caption{Filter-method selection summary across datasets. Restricted to Welch $t$-test, ANOVA, and BH-FDR; see Tables~\ref{tab:gse19804_probes} and~\ref{tab:gse42568_probes_summary} for the smaller sets produced by the wrapper and embedded methods.}

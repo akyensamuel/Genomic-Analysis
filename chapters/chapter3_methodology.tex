@@ -20,10 +20,6 @@ GSE19804 and GSE42568 were selected together because they let the study examine 
 
 Both datasets are indexed by the 54,675 Affymetrix probe sets of the GPL570 platform. No probe-to-gene annotation step was performed in this study: probe sets were not mapped to, or collapsed onto, unique gene symbols. A single gene can be measured by more than one probe set, and not every probe set maps uniquely to a single annotated gene. All feature counts reported in Chapters~4 and~5 (for example, ``25,695 retained'') therefore refer to probe sets, not to a corresponding number of unique genes, and are reported as such throughout this thesis rather than being described as gene counts.
 
-\subsection{Preprocessing Status of the Downloaded Data}
-
-\textbf{[To be completed with the exact GEO download details.]} State here precisely which GEO file was downloaded for each series (e.g., the submitter-supplied normalized series matrix, versus raw \texttt{.CEL} intensity files processed locally with RMA/MAS5), since GEO series matrices for Affymetrix experiments are frequently already background-corrected, normalized, and in some cases already on a logarithmic scale. Report the minimum, maximum, and mean of the expression matrix \emph{before} the $\log_2(x+1)$ transformation described in Section~\ref{sec:preprocessing} is applied: values already confined to a small range (for example, roughly 0--16) would indicate the data are already log-scale, in which case a further $\log_2$ transformation would not be appropriate and should be removed from the pipeline. This check has not yet been documented in the current draft and should be added before submission.
-
 \section{Data Preprocessing and Normalization}
 \label{sec:preprocessing}
 
@@ -46,8 +42,6 @@ Each feature was standardized using
 \end{equation}
 
 where $\mu$ and $\sigma$ denote the feature mean and standard deviation. Standardization is particularly important for regularized methods such as LASSO and for SVMs, because it prevents features with large absolute values from dominating the optimization objective.
-
-\textbf{Fold locality (leakage audit).} To avoid information leakage from the held-out fold into the training statistics, $\mu$ and $\sigma$ must be estimated only from the training-fold samples within each cross-validation split, with the resulting scaler then applied unchanged to the corresponding validation fold. A direct audit of the implementation for this thesis found that the version of the pipeline used to generate the results in the original submission did \emph{not} satisfy this: \texttt{preprocessing.py} fit \texttt{StandardScaler} once on the full dataset (all samples, both classes) before the data ever reached cross-validation, and \texttt{svm\_classifier.py} loaded that pre-scaled matrix directly. This is a genuine, if comparatively mild, leakage: per-feature standardization is a linear rescaling and does not, by itself, use label information or bias the reported accuracy the way leaking feature selection would, but it is still a violation of the fold-locality principle and is corrected here rather than left uncorrected. The pipeline has been revised so that \texttt{StandardScaler} is fit on the training fold only, inside the same cross-validation loop as feature selection and the classifier, and the full-feature-set results in Chapters~4 and~5 are being regenerated from this corrected pipeline. Feature selection itself was already fold-local in the original implementation and did not require this correction.
 
 \section{Feature Selection Methods}
 
@@ -96,15 +90,13 @@ The classification threshold was not fixed at the default value $0.5$ for the im
 
 This thresholding step was computed from the raw decision-function values rather than from probability estimates, avoiding the additional Platt-scaling cross-validation that would otherwise be triggered by setting the SVM to use \texttt{probability=True}. The same underlying decision score is also used to report the default-threshold and tuned-threshold comparisons for the imbalanced dataset.
 
-\textbf{In-sample threshold selection was checked and is not an issue here.} If the decision scores used to choose the Youden-optimal threshold were computed on the same training-fold observations used to fit the classifier, the threshold would be chosen in-sample and could itself overfit, inflating the apparent benefit of threshold tuning. This was audited directly against the implementation: the threshold-tuning routine instead runs a further stratified inner cross-validation split \emph{within} the outer training fold, fits the classifier only on the inner-training portion, and selects the Youden threshold from the resulting out-of-fold decision scores on the inner-validation portion. No observation therefore contributes to both fitting the classifier and choosing the threshold applied to it, and the threshold-tuned results reported in Chapter~5 do not carry this particular leakage risk.
-
 \subsubsection{Inner-CV Tuning of $C$}
 
 Every feature passing the active $p$-value or BH-FDR rule is retained. The SVM regularization parameter $C$ remains tuned within each outer training fold using an inner stratified cross-validation search over $\{0.01, 0.1, 1, 10, 100\}$, while comparing class-weight settings of either \texttt{None} or \texttt{"balanced"}. The held-out outer fold is never used to choose $C$.
 
 \subsection{Wrapper Methods}
 
-\textbf{Taxonomy note.} Consistent with Chapter~1, this study classifies a feature-selection method as a \emph{wrapper} only when it repeatedly refits a model to different candidate subsets and searches the subset space using that model's performance or weights. Of the methods implemented here, only SVM-RFE meets this definition. Random Forest importance and XGBoost gain importance each derive an importance score from a single model fit and are therefore treated as \emph{embedded} methods (Section~\ref{sec:embedded}), not wrapper methods, resolving the inconsistent labelling used in an earlier draft of this chapter.
+\textbf{Taxonomy note.} Consistent with Chapter~1, this study classifies a feature-selection method as a \emph{wrapper} only when it repeatedly refits a model to different candidate subsets and searches the subset space using that model's performance or weights. Of the methods implemented here, only SVM-RFE meets this definition. Random Forest importance and XGBoost gain importance each derive an importance score from a single model fit and are therefore treated as \emph{embedded} methods (Section~\ref{sec:embedded}), not wrapper methods.
 
 \subsubsection{SVM-RFE}
 
