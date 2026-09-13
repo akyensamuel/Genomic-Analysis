@@ -27,7 +27,9 @@ Fix log (vs original)
 
 from __future__ import annotations
 
+import gzip
 import logging
+import re
 import sys
 import urllib.request
 from pathlib import Path
@@ -55,6 +57,10 @@ class GenomicDataProcessor:
             "cancer_type": "Breast Cancer",
             "n_cancer": 104,
             "n_normal": 17,
+            # GSE42568's normal samples are an independently sampled
+            # comparison group, not matched to specific cancer patients
+            # (Chapter 3, Section 2.2) -> no patient grouping applies.
+            "paired_samples": False,
         },
         "GSE19804": {
             "url": (
@@ -65,6 +71,13 @@ class GenomicDataProcessor:
             "cancer_type": "Lung Cancer",
             "n_cancer": 60,
             "n_normal": 60,
+            # Confirmed from the series matrix !Sample_title line: sample
+            # titles are "Lung Cancer <id>T" / "Lung Normal <id>N", where
+            # <id> is shared between a patient's tumour and paired normal
+            # sample (e.g. "Lung Cancer 2T" and "Lung Normal 2N" are the
+            # same patient). Cross-validation must keep both members of a
+            # pair in the same fold (see _extract_sample_groups below).
+            "paired_samples": True,
         },
     }
 
@@ -106,6 +119,7 @@ class GenomicDataProcessor:
         self.X_log: pd.DataFrame | None = None
         self.X_scaled: pd.DataFrame | None = None
         self.y: np.ndarray | None = None
+        self.groups: np.ndarray | None = None  # patient/case ID per sample, or None
 
     # ------------------------------------------------------------------
     # Download
@@ -152,11 +166,74 @@ class GenomicDataProcessor:
             [1] * config["n_cancer"] + [0] * config["n_normal"], dtype=int
         )
 
+        # Patient/case grouping, for datasets with matched tumour-normal
+        # pairs (e.g. GSE19804). Extracted from the raw !Sample_title line,
+        # which pd.read_csv above discarded via comment="!", so this line
+        # is re-read directly from the same file.
+        if config.get("paired_samples", False):
+            self.groups = self._extract_sample_groups(filepath)
+            if self.groups is not None and len(self.groups) == self.X_raw.shape[0]:
+                logger.info(
+                    f"Extracted {len(set(self.groups))} unique patient/case "
+                    f"groups for {self.dataset_name} (paired_samples=True)."
+                )
+            else:
+                logger.warning(
+                    f"paired_samples=True for {self.dataset_name} but group "
+                    "extraction failed or length mismatch; falling back to "
+                    "ungrouped cross-validation. Verify the !Sample_title "
+                    "parsing regex against this series' actual title format."
+                )
+                self.groups = None
+        else:
+            self.groups = None
+
         logger.info(
-            f"Loaded: {self.X_raw.shape[0]} samples × {self.X_raw.shape[1]} features | "
+            f"Loaded: {self.X_raw.shape[0]} samples x {self.X_raw.shape[1]} features | "
             f"{config['n_cancer']} cancer / {config['n_normal']} normal"
         )
         return self.X_raw, self.y
+
+    @staticmethod
+    def _extract_sample_groups(filepath: Path) -> np.ndarray | None:
+        """
+        Parse the !Sample_title line from a GEO series matrix file and
+        derive a patient/case group ID for each sample, in column order.
+
+        Verified against GSE19804's actual format: titles are
+        "Lung Cancer <id>T" / "Lung Normal <id>N", e.g. "Lung Cancer 2T"
+        and "Lung Normal 2N" share patient ID "2". The regex below pulls
+        the first run of digits out of each quoted title as the group ID,
+        which is robust to the T/N suffix and the "Cancer"/"Normal" label
+        but assumes each title contains exactly one numeric ID shared by
+        a sample's pair. Returns None (rather than raising) if the line
+        is missing or no titles matched, so callers can fall back to
+        ungrouped cross-validation instead of crashing.
+        """
+        title_line = None
+        with gzip.open(filepath, "rt", encoding="utf-8", errors="replace") as f:
+            for line in f:
+                if line.startswith("!Sample_title"):
+                    title_line = line
+                    break
+
+        if title_line is None:
+            return None
+
+        # Titles are tab-separated, double-quoted strings after the
+        # "!Sample_title" tag itself.
+        titles = [t.strip().strip('"') for t in title_line.strip().split("\t")[1:]]
+        ids = []
+        for title in titles:
+            match = re.search(r"(\d+)", title)
+            if match is None:
+                return None
+            ids.append(match.group(1))
+
+        if not ids:
+            return None
+
+        return np.array(ids)
 
     def apply_log_transformation(self) -> pd.DataFrame:
         """Apply log2(x + 1) transformation to stabilise variance."""
@@ -326,7 +403,9 @@ class GenomicDataProcessor:
         preprocessed_datasets/<dataset_name>/<dataset_name>_X_log.npy,
         alongside the y/genes/samples arrays already written by
         save_preprocessed_data(). This is the correct input for any
-        pipeline that must fit StandardScaler fold-locally.
+        pipeline that must fit StandardScaler fold-locally. Also persists
+        self.groups (patient/case IDs), if extracted, for use with
+        StratifiedGroupKFold on paired datasets such as GSE19804.
         """
         if self.X_log is None:
             raise ValueError(
@@ -343,13 +422,19 @@ class GenomicDataProcessor:
         np.save(out_dir / f"{self.dataset_name}_y.npy", self.y)
         np.save(out_dir / f"{self.dataset_name}_genes.npy", self.X_log.columns.values)
         np.save(out_dir / f"{self.dataset_name}_samples.npy", self.X_log.index.values)
+        if self.groups is not None:
+            np.save(out_dir / f"{self.dataset_name}_groups.npy", self.groups)
+            logger.info(f"Saved patient/case groups ({len(set(self.groups))} unique).")
 
         logger.info(f"Log-stage cache saved to: {out_dir}")
 
-    def load_log_stage_data(self) -> tuple[pd.DataFrame, np.ndarray]:
+    def load_log_stage_data(self) -> tuple[pd.DataFrame, np.ndarray, np.ndarray | None]:
         """
         Load the log-stage (pre-standardization) cache written by
-        save_log_stage_data(). Raises FileNotFoundError if missing.
+        save_log_stage_data(). Raises FileNotFoundError if the core X/y/
+        genes/samples files are missing. Returns (X_log, y, groups), where
+        groups is None if this dataset has no patient/case grouping (e.g.
+        GSE42568) or the groups file was never written.
         """
         logger.info(f"Loading log-stage cache for {self.dataset_name} ...")
 
@@ -358,6 +443,7 @@ class GenomicDataProcessor:
         y_path     = cache_dir / f"{self.dataset_name}_y.npy"
         cols_path  = cache_dir / f"{self.dataset_name}_genes.npy"
         index_path = cache_dir / f"{self.dataset_name}_samples.npy"
+        groups_path = cache_dir / f"{self.dataset_name}_groups.npy"
 
         missing = [p for p in (X_path, y_path, cols_path, index_path) if not p.exists()]
         if missing:
@@ -371,9 +457,13 @@ class GenomicDataProcessor:
             index=np.load(index_path, allow_pickle=True),
             columns=np.load(cols_path, allow_pickle=True),
         )
+        groups = np.load(groups_path, allow_pickle=True) if groups_path.exists() else None
 
-        logger.info(f"Log-stage cache loaded: {X_log.shape}")
-        return X_log, y
+        logger.info(
+            f"Log-stage cache loaded: {X_log.shape}"
+            + (f" with {len(set(groups))} patient/case groups" if groups is not None else " (no groups)")
+        )
+        return X_log, y, groups
 
     # ------------------------------------------------------------------
     # Persistence - CSV export (used by feature_selection standalone mode)

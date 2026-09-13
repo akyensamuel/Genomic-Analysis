@@ -30,7 +30,7 @@ Each pipeline is scored on five folds and reported as mean $\pm$ standard deviat
 
 \subsection{Scope and Methodology}
 
-The GSE42568 analysis was extended to test whether the poor minority-class performance was driven by classifier design or by class imbalance itself, though this experiment does not by itself isolate which factor is responsible (see Section~\ref{sec:gse42568_discussion}). \textbf{These extensions were run for all seven Path B feature-selection methods}, not only Welch's $t$-test as in an earlier draft of this chapter: for each method, the following variants were evaluated, all using the same fold-local feature-selection pipeline as Table~\ref{tab:gse42568_svm_results}:
+The GSE42568 analysis was extended to test whether the poor minority-class performance was driven by classifier design or by class imbalance itself, though this experiment does not by itself isolate which factor is responsible (see Section~\ref{sec:gse42568_discussion}). These extensions were run for all seven Path B feature-selection methods: for each method, the following variants were evaluated, all using the same fold-local feature-selection pipeline as Table~\ref{tab:gse42568_svm_results}:
 
 \begin{itemize}
     \item Baseline: default decision threshold (0.0), $C = 1.0$
@@ -40,7 +40,7 @@ The GSE42568 analysis was extended to test whether the poor minority-class perfo
     \item Logistic regression, Random Forest, and XGBoost: alternative classifiers using the same fold-selected probes
 \end{itemize}
 
-\textbf{A methodological caveat on the SMOTE variant.} Because SMOTE is applied \emph{before} the feature-selection step in this pipeline, the $t$-test/ANOVA/BH-FDR filters see a synthetically class-balanced training fold rather than the true, imbalanced one. This inflates the number of probes that reach nominal significance: SMOTE retained a mean of $20{,}487$ probes under Welch selection and $13{,}259$ under BH-FDR, versus $6{,}486$ and $1.6$ respectively without SMOTE (Table~\ref{tab:gse42568_smote_inflation}). This is a known interaction in the SMOTE-plus-feature-selection literature --- synthetic samples are highly correlated with their real neighbours, which understates within-group variance and inflates apparent significance --- and is reported here as a methodological caveat rather than a genuine gain in discriminative signal, since the SMOTE variant's MCC ($-0.105$ for all three filter methods, identical because the resulting downstream classifier collapses to the majority class in exactly the same way regardless of which of the three near-identical inflated feature sets it receives) is in fact \emph{worse} than the un-resampled baseline for two of the three filters.
+\textbf{A methodological caveat on the SMOTE variant.} Because SMOTE is applied \emph{before} the feature-selection step in this pipeline, the $t$-test/ANOVA/BH-FDR filters see a synthetically class-balanced training fold rather than the true, imbalanced one. This inflates the number of probes that reach nominal significance: SMOTE retained a mean of $20{,}487$ probes under Welch selection and $13{,}259$ under BH-FDR, versus $6{,}486$ and $1.6$ respectively without SMOTE (Table~\ref{tab:gse42568_smote_inflation}). This is a known interaction in the SMOTE-plus-feature-selection literature --- synthetic samples are highly correlated with their real neighbours, which understates within-group variance and inflates apparent significance --- and is reported here as a methodological caveat rather than a genuine gain in discriminative signal, since the SMOTE variant's MCC ($-0.105$ for all three filter methods, identical because the resulting downstream classifier collapses to the majority class in exactly the same way regardless of which of the three near-identical inflated feature sets it receives) is in fact \emph{worse} than the un-resampled baseline for all three filters.
 
 \begin{table}[H]
     \centering
@@ -176,6 +176,7 @@ Figure~\ref{fig:gse19804_comparison} visualises the three headline metrics side 
     \item \textbf{Statistical filter paths:} Welch, ANOVA, and BH-FDR retain large sets and have Accuracy $=95.00\%$; their MCC is $0.9013$.
     \item \textbf{Alternative Classifiers:} As a baseline check on classifier choice, substituting the linear SVM for an XGBoost classifier on the Welch's $t$-test selected features improved Accuracy slightly to $95.83\%$ and MCC to $0.9240$, demonstrating that non-linear ensemble methods can provide a marginal gain even on this highly separable balanced dataset.
     \item \textbf{Feature-selection stability across folds:} the per-fold retained-feature counts and their cross-fold Jaccard overlap (Table~\ref{tab:gse19804_stability}) show that ``equal accuracy'' does not imply ``equal features.'' SVM-RFE retains an identical $96$ features in every fold (the deterministic $0.8 \times n_{\mathrm{samples}}$ bound), but its mean pairwise Jaccard overlap across folds is only $0.186$, and Random Forest importance is even less stable ($0.032$ mean overlap despite a stable accuracy of $95.00\%$) --- the folds are selecting substantially different probes while reaching the same classification score. The three filter methods are comparatively stable ($0.76$--$0.77$), and LASSO is intermediate ($0.28$) with a highly variable retained-feature count (from 11 to 195 features across the 5 folds). This instability is a caveat on any claim that a specific selected probe subset is ``the'' informative signal, even where the resulting accuracy is stable.
+    \item \textbf{Patient-pairing limitation:} the cross-validation splits used to produce Table~\ref{tab:gse19804_svm_results} are stratified by class label only and do not account for the patient-paired design of GSE19804 described in Chapter~3 (Section~\ref{sec:cv}). Because a tumour sample and its matched normal sample from the same patient can fall in different folds, the results above should be treated as an upper bound on achievable performance pending regeneration under a patient-grouped cross-validation split (e.g.\ \texttt{StratifiedGroupKFold} by patient identifier), which is identified as the more rigorous protocol for this dataset.
 \end{enumerate}
 
 \begin{table}[H]
@@ -245,16 +246,25 @@ Table~\ref{tab:gse42568_svm_results} reports performance on the imbalanced GSE42
 
 \begin{table}[H]
 \centering
-\caption{Per-fold retained-probe counts for the BH-FDR-ranked selector on GSE42568. When zero probes survive BH correction in a fold, the pipeline falls back to the single highest-F-score probe (Chapter~3) rather than leaving the fold unscored; this fallback fires in most folds here.}
+\caption{Per-fold retained-probe counts and cross-fold selection stability, all seven Path B methods, GSE42568. When zero probes survive BH correction in a fold, the pipeline falls back to the single highest-F-score probe (Chapter~3) rather than leaving the fold unscored; this fallback fires in most folds for BH-FDR. Stability is the mean pairwise Jaccard overlap of the selected-feature index sets across the 5 folds.}
 \label{tab:gse42568_fdr_folds}
-\begin{tabular}{lcccccc}
+\begin{tabular}{lccccccc}
 \toprule
-& Fold 1 & Fold 2 & Fold 3 & Fold 4 & Fold 5 & Mean $\pm$ SD \\
+\textbf{Method} & \multicolumn{5}{c}{\textbf{Probes retained per fold}} & \textbf{Mean $\pm$ SD} & \textbf{Jaccard} \\
+ & Fold 1 & Fold 2 & Fold 3 & Fold 4 & Fold 5 & & \textbf{stability} \\
 \midrule
-Probes retained & 1 & 3 & 1 & 2 & 1 & $1.6 \pm 0.9$ \\
+Welch $t$-test & 6,623 & 7,338 & 5,554 & 7,422 & 5,491 & $6,485.6 \pm 932.7$ & 0.389 \\
+ANOVA & 1,883 & 3,415 & 2,936 & 3,371 & 3,593 & $3,039.6 \pm 690.2$ & 0.284 \\
+BH-FDR-ranked & 1 & 3 & 1 & 2 & 1 & $1.6 \pm 0.9$ & 0.108 \\
+SVM-RFE & 96 & 97 & 97 & 97 & 97 & $96.8 \pm 0.4$ & 0.114 \\
+RF importance & 292 & 339 & 331 & 320 & 341 & $324.6 \pm 20.0$ & 0.052 \\
+XGBoost importance & 32 & 52 & 52 & 49 & 48 & $46.6 \pm 8.4$ & 0.047 \\
+LASSO & 9 & 73 & 83 & 101 & 69 & $67.0 \pm 34.7$ & 0.098 \\
 \bottomrule
 \end{tabular}
 \end{table}
+
+Compared with GSE19804 (Table~\ref{tab:gse19804_stability}), every method on GSE42568 shows lower cross-fold selection stability --- even the filter methods, which were the most stable methods on GSE19804 (Jaccard $0.76$--$0.77$), drop to $0.28$--$0.39$ here. This is consistent with the weaker and less consistent class signal on this dataset: with fewer informative probes and a small, variable minority class, the specific set of probes crossing any given selection threshold is less reproducible from fold to fold, independently of the classification performance achieved.
 
 \begin{figure}[H]
 \centering

@@ -39,7 +39,7 @@ from sklearn.metrics import (
     recall_score,
     roc_auc_score,
 )
-from sklearn.model_selection import StratifiedKFold
+from sklearn.model_selection import StratifiedGroupKFold, StratifiedKFold
 from sklearn.pipeline import Pipeline
 from sklearn.preprocessing import StandardScaler
 from sklearn.svm import SVC
@@ -125,6 +125,7 @@ class SVMClassifierWithCV:
 
         self.X: Optional[pd.DataFrame] = None
         self.y: Optional[np.ndarray] = None
+        self.groups: Optional[np.ndarray] = None
         self._load_data()
 
         # Only Path A is pre-allocated; Path B keys are created dynamically
@@ -192,7 +193,7 @@ class SVMClassifierWithCV:
         processor = GenomicDataProcessor(self.dataset_name, str(self.base_dir))
 
         try:
-            self.X, self.y = processor.load_log_stage_data()
+            self.X, self.y, self.groups = processor.load_log_stage_data()
             logger.info("Loaded from log-stage cache (pre-standardization).")
         except Exception as exc:
             logger.warning(
@@ -201,6 +202,7 @@ class SVMClassifierWithCV:
             processor.load_data()
             self.X = processor.apply_log_transformation()
             self.y = processor.y
+            self.groups = processor.groups
             processor.save_log_stage_data()
             # Also (re)build the full-dataset-standardized cache used by
             # feature_selection.py's standalone / Chapter 4 characterization
@@ -210,9 +212,37 @@ class SVMClassifierWithCV:
 
         logger.info(f"Data shape: {self.X.shape}")
         logger.info(f"Class distribution: {np.bincount(self.y).tolist()}")
+        if self.groups is not None:
+            logger.info(
+                f"Patient/case grouping active: {len(set(self.groups))} unique "
+                "groups. Outer cross-validation will use StratifiedGroupKFold "
+                "so that no patient's samples are split across the train/test "
+                "boundary."
+            )
+        else:
+            logger.info(
+                "No patient/case grouping for this dataset; outer cross-"
+                "validation uses ordinary StratifiedKFold."
+            )
         logger.info(
             "Standardization will be fit fold-locally inside the CV loop "
             "(see _fold_local_scale), not on this full matrix."
+        )
+
+    def _make_outer_cv(self):
+        """
+        Build the outer cross-validation splitter. Uses StratifiedGroupKFold
+        when this dataset has patient/case groups (e.g. GSE19804's matched
+        tumour-normal pairs), so that both samples from one patient always
+        land in the same fold; otherwise falls back to ordinary
+        StratifiedKFold (e.g. GSE42568, which has no such pairing).
+        """
+        if self.groups is not None:
+            return StratifiedGroupKFold(
+                n_splits=self.n_splits, shuffle=True, random_state=self.random_state
+            )
+        return StratifiedKFold(
+            n_splits=self.n_splits, shuffle=True, random_state=self.random_state
         )
 
     @staticmethod
@@ -468,12 +498,10 @@ class SVMClassifierWithCV:
         logger.info("PATH A: BASELINE - All features (no feature selection)")
         logger.info("=" * 70)
 
-        cv = StratifiedKFold(
-            n_splits=self.n_splits, shuffle=True, random_state=self.random_state
-        )
+        cv = self._make_outer_cv()
         fold_results = []
 
-        for fold_num, (train_idx, test_idx) in enumerate(cv.split(self.X, self.y), 1):
+        for fold_num, (train_idx, test_idx) in enumerate(cv.split(self.X, self.y, groups=self.groups), 1):
             logger.info(f"--- Fold {fold_num}/{self.n_splits} ---")
 
             X_train = self.X.iloc[train_idx]
@@ -529,12 +557,10 @@ class SVMClassifierWithCV:
 
         p_value = p_value if p_value is not None else getattr(self, "p_value", None)
 
-        cv = StratifiedKFold(
-            n_splits=self.n_splits, shuffle=True, random_state=self.random_state
-        )
+        cv = self._make_outer_cv()
         fold_results = []
 
-        for fold_num, (train_idx, test_idx) in enumerate(cv.split(self.X, self.y), 1):
+        for fold_num, (train_idx, test_idx) in enumerate(cv.split(self.X, self.y, groups=self.groups), 1):
             logger.info(f"--- Fold {fold_num}/{self.n_splits} ---")
 
             X_train = self.X.iloc[train_idx]
