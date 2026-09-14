@@ -64,7 +64,30 @@ where $\bar{x}_{c,j}$ and $\bar{x}_{n,j}$ denote the sample means in the cancer 
 
 \subsubsection{ANOVA F-Test}
 
-The ANOVA F-test evaluates whether the between-group variance exceeds the within-group variance for each probe. Probes with larger F-scores and smaller associated $p$-values are treated as more discriminative. Under this policy, every probe with $p \leq 0.05$ is retained; the F-score is used for diagnostics. As with the Welch $t$-test above, this is an uncorrected nominal threshold and is used here purely as a predictive filter, not as a claim of biological significance.
+The ANOVA F-test was used as a filter method to assess the ability of each probe to discriminate between the different class groups. For a given probe, ANOVA compares the variation between class means with the variation within the classes. The F-statistic is given by
+
+$$
+F = \frac{MS_B}{MS_W},
+$$
+
+where \(MS_B\) is the mean square between groups and \(MS_W\) is the mean square within groups. For \(k\) classes and \(N\) observations,
+
+$$
+MS_B = \frac{\displaystyle\sum_{j=1}^{k} n_j(\bar{x}_j-\bar{x})^2}{k-1},
+$$
+
+and
+
+$$
+MS_W = \frac{\displaystyle\sum_{j=1}^{k}\sum_{i=1}^{n_j}(x_{ij}-\bar{x}_j)^2}{N-k},
+$$
+
+where \(n_j\) is the number of observations in class \(j\), \(\bar{x}_j\) is the class mean, and \(\bar{x}\) is the overall mean.
+
+A larger \(F\)-score indicates that the variation between class means is large relative to the variation within the classes, making the probe more discriminative. Thus, genes/probes with larger F-scores and smaller associated \(p\)-values are treated as more discriminative because they show stronger evidence of differences between the class groups.
+
+Under the selection policy used in this study, every probe with \(p \leq 0.05\) is retained, while the F-score is used for diagnostic ranking and interpretation. As with the Welch \(t\)-test, this is an uncorrected nominal threshold and is used purely as a predictive filter, not as a claim of biological significance.
+
 
 \subsubsection{BH-FDR Ranked Filter}
 
