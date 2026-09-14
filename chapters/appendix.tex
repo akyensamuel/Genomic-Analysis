@@ -1,164 +1,47 @@
-\chapter{APPENDIX A}
+\documentclass[a4paper,12pt, oneside]{book}
+\usepackage{mystyle}
 
-\section{COMPUTATIONAL IMPLEMENTATION}
-The complete computational implementation, including the analysis scripts and supporting files, is available in the project repository on GitHub: [Genomic-Analysis repository](https://github.com/akyensamuel/Genomic-Analysis). The repository provides access to the code used for preprocessing, feature selection, classification, and evaluation, and therefore serves as a supplementary resource for reproducing the analysis.\\
+\begin{document}
+\include{titlepage} %this can be percentaged
+
+\frontmatter
+\addcontentsline{toc}{chapter}{DECLARATION}
+\include{declaration}  %this can be percentaged
+
+\addcontentsline{toc}{chapter}{DEDICATION}
+\include{dedication} %this can be percentaged
+
+\include{abstract} %this can be percentaged
+
+\addcontentsline{toc}{chapter}{ACKNOWLEDGMENT}
+\include{acknowledgment} %this can be percentaged
+
+\tableofcontents  %this can be percentaged
+
+\addcontentsline{toc}{chapter}{ABBREVIATION}
+\include{abbreviation} %this can be percentaged
+
+\newpage
+\listoftables   %this can be percentaged
+\addcontentsline{toc}{chapter}{LIST OF TABLES}
+
+\newpage
+\listoffigures  %this can be percentaged
+\addcontentsline{toc}{chapter}{LIST OF FIGURES}
+
+\mainmatter
+\include{intro} %this can be percentaged
+\include{chapter2} %this can be percentaged
+\include{chapter3} %this can be percentaged
+\include{chapter4} %this can be percentaged
+\include{chapter5} %this can be percentaged
 
 
-This appendix presents the computational implementation used in the analysis of the gene expression datasets. The analysis was implemented in Python using scripts for preprocessing, feature selection, classification, and evaluation. The main computational workflow consisted of three stages: preprocessing, feature selection, and classification.
+\backmatter
+\bibliographystyle{apalike} %this can be percentaged
+\bibliography{myref} %this can be percentaged
+\addcontentsline{toc}{chapter}{REFERENCES}
 
-\subsection{Software and Libraries}
+\include{appendix} %this can be percentaged
 
-The analysis was implemented using Python and the following libraries:
-
-\begin{itemize}
-\item \texttt{NumPy} for numerical computation and array manipulation;
-\item \texttt{Pandas} for data manipulation and CSV file processing;
-\item \texttt{SciPy} for statistical tests;
-\item \texttt{Scikit-learn} for feature selection, SVM classification, cross-validation, and evaluation;
-\item \texttt{Matplotlib} and \texttt{Seaborn} for graphical representation; and
-\item \texttt{imbalanced-learn} for class-imbalance experiments.
-\end{itemize}
-
-The required Python packages are specified in the project's \texttt{requirements.txt} file.
-
-\subsection{Project Structure}
-
-The computational implementation was organised into separate directories according to their functions. The main structure was:
-
-\begin{verbatim}
-Genomic-Analysis/
-|
-+-- chapters/
-|   +-- chapter1_introduction.tex
-|   +-- chapter2_methodology.tex
-|   +-- chapter3_results.tex
-|   +-- chapter4_svm_evaluation.tex
-|
-+-- scripts/
-|   +-- preprocessing.py
-|   +-- feature_selection.py
-|   +-- svm_classifier.py
-|   +-- svm_comparative.py
-|
-+-- tests/
-|   +-- test_svm_integration.py
-|   +-- make_synthetic.py
-|   +-- run_svm_synthetic.py
-|
-+-- results/
-|   +-- feature_selection/
-|
-+-- datasets/
-+-- preprocessed_datasets/
-+-- main.tex
-+-- requirements.txt
-\end{verbatim}
-
-The \texttt{datasets} and \texttt{preprocessed_datasets} directories contain locally generated data and cached files, while the analysis scripts contain the main computational procedures.
-
-\subsection{Data Preprocessing}
-
-The preprocessing procedure was implemented in \texttt{scripts/preprocessing.py}. The script downloads or loads the required GEO dataset, applies the specified transformation and normalization procedures, and saves the processed data for subsequent analysis.
-
-For a dataset $(X)$, the preprocessing procedure includes the transformation
-
-\[
-x' = \log_2(x+1),
-\]
-
-followed by feature-wise standardization. For each feature, the standardized value is given by
-
-\[
-z_{ij} = \frac{x_{ij}-\mu_j}{\sigma_j},
-\]
-
-where $(x_{ij})$ is the expression value of feature $(j)$ for sample $(i)$, $(\mu_j)$ is the mean expression of feature $(j)$, and $(\sigma_j)$ is its standard deviation.
-
-The processed data are stored as NumPy arrays and labelled CSV files for use by the subsequent analysis stages.
-
-\subsection{Feature Selection}
-
-Feature selection was implemented in \texttt{scripts/feature_selection.py}. The implementation provides statistical, recursive, model-based, and regularisation-based selection procedures.
-
-The implemented methods include:
-
-\begin{itemize}
-\item Welch's t-test
-\item ANOVA F-test
-\item BH-FDR
-\item SVM-RFE
-\item Random Forest feature importance
-\item XGBoost feature importance
-\item LASSO-based feature selection.
-\end{itemize}
-
-For statistical selection, the implementation allows features satisfying the specified p-value criterion to be retained without imposing an arbitrary top-k restriction.
-
-For model-based methods, the selected features are determined from the importance measures or coefficients generated by the corresponding model.
-
-\subsection{Classification and Cross-Validation} 
-
-Classification was implemented using the linear Support Vector Machine in \texttt{scripts/svm_classifier.py}. The classifier was evaluated using stratified 5-fold cross-validation.
-
-For each fold, the training data were used to fit the feature-selection procedure and classifier, while the resulting model was evaluated on the corresponding validation data. This structure ensures that feature selection is performed using the training portion of each fold rather than using the complete dataset.
-
-The SVM was configured with a linear kernel and balanced class weights. The regularisation parameter was set to
-
-$
-C=1.0.
-$
-
-The classification procedure consisted of two paths:
-
-\begin{enumerate}
-\item \textbf{Path A:} classification using the complete feature set without feature selection.
-\item \textbf{Path B:} feature selection followed by SVM classification within the cross-validation procedure.
-\end{enumerate}
-
-\subsection{Evaluation}
-
-The implementation calculates several classification metrics, including accuracy, precision, recall, F1-score, sensitivity, specificity, and MCC.
-
-For a binary classification problem, MCC is calculated as
-
-\[
-\frac{TP(TN)-FP(FN)}
-{\sqrt{(TP+FP)(TP+FN)(TN+FP)(TN+FN)}}.
-\]
-
-MCC was used as an important evaluation measure because it accounts for all four entries of the confusion matrix and is therefore useful when the class distribution is imbalanced.
-
-The results from the cross-validation folds are summarised using the mean and standard deviation of the evaluation metrics.
-
-\subsection{Reproducibility}
-
-The main analysis can be reproduced using the scripts provided in the project repository. For example, preprocessing of the GSE19804 dataset can be performed using:
-
-\begin{verbatim}
-python scripts/preprocessing.py GSE19804
-\end{verbatim}
-
-Feature selection can then be performed using:
-
-\begin{verbatim}
-python scripts/feature_selection.py
---dataset GSE19804
---p-value 0.05
-\end{verbatim}
-
-The SVM evaluation can be executed using:
-
-\begin{verbatim}
-python scripts/svm_classifier.py
---dataset GSE19804
-\end{verbatim}
-
-The corresponding commands can be applied to GSE42568 by replacing the dataset name.
-
-The repository also contains integration tests for checking the SVM analysis pipeline:
-
-\begin{verbatim}
-python -m pytest tests/ -v
-\end{verbatim}
-
-The complete computational implementation and supporting files are maintained in the project repository.
+\end{document}
