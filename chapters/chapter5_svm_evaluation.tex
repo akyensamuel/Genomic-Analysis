@@ -50,34 +50,14 @@ The GSE42568 analysis was extended to test whether the poor minority-class perfo
     \small
     \resizebox{\textwidth}{!}{%
         \begin{tabular}{lcccc}
-            \toprule
-            \textbf{Method} &
-            \textbf{Probes (no SMOTE)} &
-            \textbf{Probes (with SMOTE)} &
-            \textbf{MCC (no SMOTE)} &
-            \textbf{MCC (with SMOTE)} \\
-            \midrule
-
-            Welch $t$-test
-                & 6,485.6
-                & 20,487.2
-                & $-0.0315$
-                & $-0.1049$ \\
-
-            ANOVA
-                & 3,039.6
-                & 20,608.4
-                & $+0.0727$
-                & $-0.1049$ \\
-
-            BH-FDR-ranked
-                & 1.6
-                & 13,259.4
-                & $+0.1922$
-                & $-0.1049$ \\
-
-            \bottomrule
-        \end{tabular}%
+\toprule
+\textbf{Method} & \textbf{Probes (no SMOTE)} & \textbf{Probes (with SMOTE)} & \textbf{MCC (no SMOTE)} & \textbf{MCC (with SMOTE)} \\
+\midrule
+Welch $t$-test & 6,498.0 & 20,331.0 & $-0.0315$ & $-0.1049$ \\
+ANOVA & 3,066.0 & 20,447.0 & $+0.0718$ & $-0.1049$ \\
+BH-FDR-ranked & 2.0 & 13,019.0 & $+0.1041$ & $-0.0342$ \\
+\bottomrule
+\end{tabular}%
     }
 \end{table}
 
@@ -93,33 +73,33 @@ Table~\ref{tab:gse42568_extensions} reports the baseline, threshold-tuned, and $
 \toprule
 \textbf{Method} & \textbf{Variant} & \textbf{Accuracy} & \textbf{Specificity} & \textbf{MCC} & \textbf{ROC-AUC} \\
 \midrule
-Welch $t$-test & Baseline & $0.8430$ & $0.0000$ & $-0.0315$ & $0.5664$ \\
- & Threshold-tuned & $0.8513$ & $0.0667$ & $+0.0526$ & $0.5664$ \\
- & $C$-tuned & $0.8430$ & $0.0000$ & $-0.0315$ & $0.5664$ \\
+Welch $t$-test & Baseline & $0.8430$ & $0.0000$ & $-0.0315$ & $0.5737$ \\
+ & Threshold-tuned & $0.8347$ & $0.0667$ & $+0.0161$ & $0.5737$ \\
+ & $C$-tuned & $0.8430$ & $0.0000$ & $-0.0315$ & $0.5737$ \\
 \midrule
-ANOVA & Baseline & $0.7603$ & $0.2333$ & $+0.0727$ & $0.5014$ \\
- & Threshold-tuned & $0.4543$ & $0.5833$ & $+0.0078$ & $0.5014$ \\
- & $C$-tuned & $0.7603$ & $0.2333$ & $+0.0727$ & $0.5014$ \\
+ANOVA & Baseline & $0.7603$ & $0.2333$ & $+0.0718$ & $0.4902$ \\
+ & Threshold-tuned & $0.4210$ & $0.5167$ & $-0.0564$ & $0.4902$ \\
+ & $C$-tuned & $0.7603$ & $0.2333$ & $+0.0718$ & $0.4902$ \\
 \midrule
-BH-FDR-ranked & Baseline & $0.7767$ & $0.3000$ & $+0.1922$ & $0.5381$ \\
- & Threshold-tuned & $0.7183$ & $0.3000$ & $+0.1102$ & $0.5381$ \\
- & $C$-tuned & $0.8100$ & $0.2500$ & $+0.1801$ & $0.5508$ \\
+BH-FDR-ranked & Baseline & $0.7193$ & $0.3500$ & $+0.1041$ & $0.6144$ \\
+ & Threshold-tuned & $0.7357$ & $0.3500$ & $+0.1235$ & $0.6144$ \\
+ & $C$-tuned & $0.7693$ & $0.3000$ & $+0.1469$ & $0.5763$ \\
 \midrule
-SVM-RFE & Baseline & $0.7517$ & $0.1667$ & $-0.0036$ & $0.4834$ \\
- & Threshold-tuned & $0.5210$ & $0.4667$ & $-0.0028$ & $0.4834$ \\
- & $C$-tuned & $0.7680$ & $0.1667$ & $+0.0166$ & $0.4911$ \\
+SVM-RFE & Baseline & $0.7680$ & $0.2167$ & $+0.0810$ & $0.5086$ \\
+ & Threshold-tuned & $0.5130$ & $0.4667$ & $-0.0052$ & $0.5086$ \\
+ & $C$-tuned & $0.7597$ & $0.2167$ & $+0.0652$ & $0.5086$ \\
 \midrule
-RF importance & Baseline & $0.7933$ & $0.0500$ & $-0.0383$ & $0.5727$ \\
- & Threshold-tuned & $0.6520$ & $0.4333$ & $+0.0948$ & $0.5727$ \\
- & $C$-tuned & $0.7850$ & $0.0500$ & $-0.0540$ & $0.5758$ \\
+RF importance & Baseline & $0.7937$ & $0.1167$ & $+0.0035$ & $0.5493$ \\
+ & Threshold-tuned & $0.6357$ & $0.4667$ & $+0.0933$ & $0.5493$ \\
+ & $C$-tuned & $0.7937$ & $0.1167$ & $+0.0035$ & $0.5493$ \\
 \midrule
-XGBoost importance & Baseline & $0.7603$ & $0.0667$ & $-0.0178$ & $0.4758$ \\
- & Threshold-tuned & $0.6703$ & $0.1667$ & $-0.0141$ & $0.4758$ \\
- & $C$-tuned & $0.7517$ & $0.1167$ & $+0.0203$ & $0.4637$ \\
+XGBoost importance & Baseline & $0.7107$ & $0.0000$ & $-0.1672$ & $0.4198$ \\
+ & Threshold-tuned & $0.6183$ & $0.0500$ & $-0.1866$ & $0.4198$ \\
+ & $C$-tuned & $0.7193$ & $0.0500$ & $-0.1060$ & $0.4495$ \\
 \midrule
-LASSO & Baseline & $0.6943$ & $0.1167$ & $-0.0888$ & $0.5127$ \\
- & Threshold-tuned & $0.5200$ & $0.4167$ & $-0.0276$ & $0.5127$ \\
- & $C$-tuned & $0.6943$ & $0.1167$ & $-0.0888$ & $0.5094$ \\
+LASSO & Baseline & $0.7110$ & $0.1833$ & $-0.0325$ & $0.4983$ \\
+ & Threshold-tuned & $0.5610$ & $0.4667$ & $+0.0334$ & $0.4983$ \\
+ & $C$-tuned & $0.7027$ & $0.1833$ & $-0.0394$ & $0.5086$ \\
 \bottomrule
 \end{tabular}
 }
@@ -144,15 +124,15 @@ Table~\ref{tab:gse19804_svm_results} presents the 5-fold stratified cross-valida
 \toprule
 \textbf{Pipeline Path} & \textbf{Accuracy} & \textbf{Precision} & \textbf{Recall} & \textbf{F1-Score} & \textbf{MCC} & \textbf{ROC-AUC} \\
 \midrule
-\textbf{Path A (Baseline)} & $0.9500 \pm 0.0685$ & $0.9513$ & $0.9500$ & $0.9500 \pm 0.0685$ & $0.9013 \pm 0.1371$ & $0.9778$ \\
+\textbf{Path A (Baseline)} & $0.9500 \pm 0.0543$ & $0.9498$ & $0.9500$ & $0.9492 \pm 0.0563$ & $0.9012 \pm 0.1079$ & $0.9750$ \\
 \midrule
-\textbf{Path B: Welch's $t$-test} & $0.9500 \pm 0.0685$ & $0.9513$ & $0.9500$ & $0.9500 \pm 0.0685$ & $0.9013 \pm 0.1371$ & $0.9806$ \\
-\textbf{Path B: ANOVA $F$-test} & $0.9500 \pm 0.0685$ & $0.9513$ & $0.9500$ & $0.9500 \pm 0.0685$ & $0.9013 \pm 0.1371$ & $0.9806$ \\
-\textbf{Path B: FDR-ranked} & $0.9500 \pm 0.0685$ & $0.9513$ & $0.9500$ & $0.9500 \pm 0.0685$ & $0.9013 \pm 0.1371$ & $0.9792$ \\
-\textbf{Path B: SVM-RFE} & $0.9167 \pm 0.0659$ & $0.9113$ & $0.9333$ & $0.9183 \pm 0.0644$ & $0.8413 \pm 0.1288$ & $0.9736$ \\
-\textbf{Path B: RF Importance} & $0.9500 \pm 0.0685$ & $0.9513$ & $0.9500$ & $0.9500 \pm 0.0685$ & $0.9013 \pm 0.1371$ & $0.9833$ \\
-\textbf{Path B: XGBoost Importance} & $0.9750 \pm 0.0373$ & $0.9846$ & $0.9667$ & $0.9738 \pm 0.0401$ & $0.9530 \pm 0.0696$ & $0.9792$ \\
-\textbf{Path B: LASSO ($L_1$)} & $0.9583 \pm 0.0510$ & $0.9664$ & $0.9500$ & $0.9572 \pm 0.0533$ & $0.9185 \pm 0.1010$ & $0.9806$ \\
+\textbf{Path B: Welch's $t$-test} & $0.9500 \pm 0.0543$ & $0.9498$ & $0.9500$ & $0.9492 \pm 0.0563$ & $0.9012 \pm 0.1079$ & $0.9792$ \\
+\textbf{Path B: ANOVA $F$-test} & $0.9500 \pm 0.0543$ & $0.9498$ & $0.9500$ & $0.9492 \pm 0.0563$ & $0.9012 \pm 0.1079$ & $0.9806$ \\
+\textbf{Path B: FDR-ranked} & $0.9500 \pm 0.0543$ & $0.9498$ & $0.9500$ & $0.9492 \pm 0.0563$ & $0.9012 \pm 0.1079$ & $0.9806$ \\
+\textbf{Path B: SVM-RFE} & $0.9167 \pm 0.0589$ & $0.9082$ & $0.9333$ & $0.9184 \pm 0.0559$ & $0.8377 \pm 0.1158$ & $0.9778$ \\
+\textbf{Path B: RF Importance} & $0.9500 \pm 0.0543$ & $0.9498$ & $0.9500$ & $0.9492 \pm 0.0563$ & $0.9012 \pm 0.1079$ & $0.9931$ \\
+\textbf{Path B: XGBoost Importance} & $0.9333 \pm 0.0475$ & $0.9212$ & $0.9500$ & $0.9339 \pm 0.0490$ & $0.8702 \pm 0.0937$ & $0.9764$ \\
+\textbf{Path B: LASSO ($L_1$)} & $0.9333 \pm 0.0559$ & $0.9483$ & $0.9167$ & $0.9311 \pm 0.0587$ & $0.8690 \pm 0.1112$ & $0.9736$ \\
 \bottomrule
 \end{tabular}
 }
@@ -176,7 +156,7 @@ Figure~\ref{fig:gse19804_comparison} visualises the three headline metrics side 
     \item \textbf{Statistical filter paths:} Welch, ANOVA, and BH-FDR retain large sets and have Accuracy $=95.00\%$; their MCC is $0.9013$.
     \item \textbf{Alternative Classifiers:} As a baseline check on classifier choice, substituting the linear SVM for an XGBoost classifier on the Welch's $t$-test selected features improved Accuracy slightly to $95.83\%$ and MCC to $0.9240$, demonstrating that non-linear ensemble methods can provide a marginal gain even on this highly separable balanced dataset.
     \item \textbf{Feature-selection stability across folds:} the per-fold retained-feature counts and their cross-fold Jaccard overlap (Table~\ref{tab:gse19804_stability}) show that ``equal accuracy'' does not imply ``equal features.'' SVM-RFE retains an identical $96$ features in every fold (the deterministic $0.8 \times n_{\mathrm{samples}}$ bound), but its mean pairwise Jaccard overlap across folds is only $0.186$, and Random Forest importance is even less stable ($0.032$ mean overlap despite a stable accuracy of $95.00\%$) --- the folds are selecting substantially different probes while reaching the same classification score. The three filter methods are comparatively stable ($0.76$--$0.77$), and LASSO is intermediate ($0.28$) with a highly variable retained-feature count (from 11 to 195 features across the 5 folds). This instability is a caveat on any claim that a specific selected probe subset is ``the'' informative signal, even where the resulting accuracy is stable.
-    \item \textbf{Patient-pairing limitation:} the cross-validation splits used to produce Table~\ref{tab:gse19804_svm_results} are stratified by class label only and do not account for the patient-paired design of GSE19804 described in Chapter~3 (Section~\ref{sec:cv}). Because a tumour sample and its matched normal sample from the same patient can fall in different folds, the results above should be treated as an upper bound on achievable performance pending regeneration under a patient-grouped cross-validation split (e.g.\ \texttt{StratifiedGroupKFold} by patient identifier), which is identified as the more rigorous protocol for this dataset.
+    \item \textbf{Patient grouping:} the cross-validation splits used to produce Table~\ref{tab:gse19804_svm_results} are stratified by class label and grouped by patient identifier using \texttt{StratifiedGroupKFold} as described in Chapter~3 (Section~\ref{sec:cv}). Because a tumour sample and its matched normal sample from the same patient are guaranteed to fall in the same fold, this evaluation prevents patient-specific signal from leaking across the split.
 \end{enumerate}
 
 \begin{table}[H]
@@ -230,15 +210,15 @@ Table~\ref{tab:gse42568_svm_results} reports performance on the imbalanced GSE42
 \toprule
 \textbf{Pipeline Path} & \textbf{Accuracy} & \textbf{Recall} & \textbf{Specificity} & \textbf{F1-Score} & \textbf{MCC} & \textbf{ROC-AUC} \\
 \midrule
-\textbf{Path A (Baseline)} & $0.8017 \pm 0.0541$ & $0.9324$ & $0.0000 \pm 0.0000$ & $0.8891 \pm 0.0332$ & $-0.0891 \pm 0.0571$ & $0.4387$ \\
+\textbf{Path A (Baseline)} & $0.8017 \pm 0.0541$ & $0.9324$ & $0.0000 \pm 0.0000$ & $0.8891 \pm 0.0332$ & $-0.0891 \pm 0.0571$ & $0.4435$ \\
 \midrule
-\textbf{Path B: Welch's $t$\text{-test}} & $0.8430 \pm 0.0181$ & $0.9810$ & $0.0000 \pm 0.0000$ & $0.9147 \pm 0.0105$ & $-0.0315 \pm 0.0432$ & $0.5664$ \\
-\textbf{Path B: ANOVA $F$\text{-test}} & $0.7603 \pm 0.0949$ & $0.8457$ & $0.2333 \pm 0.2236$ & $0.8558 \pm 0.0631$ & $+0.0727 \pm 0.2283$ & $0.5014$ \\
-\textbf{Path B: FDR-ranked} & $0.7767 \pm 0.0762$ & $0.8571$ & $0.3000 \pm 0.0456$ & $0.8663 \pm 0.0517$ & $\mathbf{+0.1922 \pm 0.1632}$ & $0.5381$ \\
-\textbf{Path B: SVM-RFE} & $0.7517 \pm 0.0439$ & $0.8467$ & $0.1667 \pm 0.2357$ & $0.8537 \pm 0.0283$ & $-0.0036 \pm 0.2074$ & $0.4834$ \\
-\textbf{Path B: RF Importance} & $0.7933 \pm 0.0780$ & $0.9138$ & $0.0500 \pm 0.1118$ & $0.8820 \pm 0.0502$ & $-0.0383 \pm 0.1375$ & $0.5727$ \\
-\textbf{Path B: XGBoost Importance} & $0.7603 \pm 0.0949$ & $0.8743$ & $0.0667 \pm 0.1491$ & $0.8609 \pm 0.0581$ & $-0.0178 \pm 0.3195$ & $0.4758$ \\
-\textbf{Path B: LASSO ($L_1$)} & $0.6943 \pm 0.0748$ & $0.7900$ & $0.1167 \pm 0.1624$ & $0.8134 \pm 0.0552$ & $-0.0888 \pm 0.0967$ & $0.5127$ \\
+\textbf{Path B: Welch's $t$\text{-test}} & $0.8430 \pm 0.0181$ & $0.9810$ & $0.0000 \pm 0.0000$ & $0.9147 \pm 0.0105$ & $-0.0315 \pm 0.0432$ & $0.5737$ \\
+\textbf{Path B: ANOVA $F$\text{-test}} & $0.7603 \pm 0.0800$ & $0.8462$ & $0.2333 \pm 0.2236$ & $0.8565 \pm 0.0535$ & $+0.0718 \pm 0.2261$ & $0.4902$ \\
+\textbf{Path B: FDR-ranked} & $0.7193 \pm 0.0303$ & $0.7786$ & $0.3500 \pm 0.0913$ & $0.8263 \pm 0.0228$ & $\mathbf{+0.1041 \pm 0.0712}$ & $0.6144$ \\
+\textbf{Path B: SVM-RFE} & $0.7680 \pm 0.1015$ & $0.8562$ & $0.2167 \pm 0.2173$ & $0.8604 \pm 0.0695$ & $+0.0810 \pm 0.2169$ & $0.5086$ \\
+\textbf{Path B: RF Importance} & $0.7937 \pm 0.0393$ & $0.9038$ & $0.1167 \pm 0.1624$ & $0.8824 \pm 0.0250$ & $+0.0035 \pm 0.1624$ & $0.5493$ \\
+\textbf{Path B: XGBoost Importance} & $0.7107 \pm 0.0661$ & $0.8267$ & $0.0000 \pm 0.0000$ & $0.8295 \pm 0.0455$ & $-0.1672 \pm 0.0423$ & $0.4198$ \\
+\textbf{Path B: LASSO ($L_1$)} & $0.7110 \pm 0.0764$ & $0.7995$ & $0.1833 \pm 0.1708$ & $0.8227 \pm 0.0579$ & $-0.0325 \pm 0.0666$ & $0.4983$ \\
 \bottomrule
 \end{tabular}
 }

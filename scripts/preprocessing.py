@@ -235,13 +235,47 @@ class GenomicDataProcessor:
 
         return np.array(ids)
 
+    # Raw values with a maximum below this threshold are treated as already
+    # being on a log2 scale (RMA/GCRMA-style GEO series matrices typically
+    # range ~0-16), and the log2(x+1) transform below is skipped rather than
+    # applied a second time. Raw values above this threshold are treated as
+    # linear-scale (MAS5-style) intensities, for which log2(x+1) is applied.
+    # Empirically confirmed for this project's two datasets: GSE19804's raw
+    # range is [3.04, 14.89] and GSE42568's is [2.31, 16.05] -- both already
+    # log2-scale, so log2(x+1) is skipped for both. This constant, not a
+    # per-dataset flag, is what decides it, so any dataset added later to
+    # DATASET_CONFIG is handled correctly without needing a manual toggle.
+    LOG_SCALE_MAX_THRESHOLD: float = 20.0
+
     def apply_log_transformation(self) -> pd.DataFrame:
-        """Apply log2(x + 1) transformation to stabilise variance."""
+        """
+        Apply log2(x + 1) transformation to stabilise variance -- but only
+        if the raw values are not already on a log scale. Applying this
+        transform to data that is already log2-scale (as both GSE19804 and
+        GSE42568 were empirically found to be, via the raw-stage profiling
+        step in __main__) would compress an already-appropriately-scaled
+        variable a second time, which is incorrect.
+        """
         if self.X_raw is None:
             raise ValueError("Run load_data() first.")
 
-        logger.info("Applying log2(x + 1) transformation ...")
-        self.X_log = np.log2(self.X_raw + 1)
+        raw_max = float(self.X_raw.values.max())
+        if raw_max < self.LOG_SCALE_MAX_THRESHOLD:
+            logger.info(
+                f"Raw max value ({raw_max:.4f}) is below the log-scale "
+                f"threshold ({self.LOG_SCALE_MAX_THRESHOLD}); data appears "
+                "already log2-scale (RMA/GCRMA-style). Skipping log2(x+1) "
+                "-- using raw values as-is for the 'log' pipeline stage."
+            )
+            self.X_log = self.X_raw
+        else:
+            logger.info(
+                f"Raw max value ({raw_max:.4f}) exceeds the log-scale "
+                f"threshold ({self.LOG_SCALE_MAX_THRESHOLD}); data appears "
+                "linear-scale (MAS5-style). Applying log2(x + 1) ..."
+            )
+            self.X_log = np.log2(self.X_raw + 1)
+
         self.X_raw = None  # free memory
         return self.X_log
 

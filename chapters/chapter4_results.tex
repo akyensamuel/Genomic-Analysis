@@ -28,13 +28,13 @@ Table~\ref{tab:feature_selection_counts} summarizes the comparison-stage results
 \cmidrule(lr){3-4} \cmidrule(lr){5-6}
  &  & \textbf{GSE19804} & \textbf{GSE42568} & \textbf{GSE19804} & \textbf{GSE42568} \\
 \midrule
-Filter   & \texttt{filter\_ttest} (Welch's $t$-test) & 25,695 & 6,706 & 53.00\% & 87.73\% \\
-Filter   & \texttt{filter\_anova} (ANOVA $F$-test) & 25,707 & 3,217 & 52.98\% & 94.12\% \\
-Filter   & \texttt{filter\_fdr\_ranked} (BH-FDR ranked) & 21,858 & 2 & 60.02\% & $\approx$100\% \\
-Wrapper  & \texttt{wrapper\_svm} (RFE to $n_{\mathrm{train}}$) & 120 & 121 & 99.78\% & 99.78\% \\
-Embedded & \texttt{wrapper\_rf} (importance $>$ mean) & 333 & 415 & 99.39\% & 99.24\% \\
-Embedded & \texttt{wrapper\_xgb} (XGBoost gain $>$ mean) & 46 & 61 & 99.92\% & 99.89\% \\
-Embedded & \texttt{embedded\_lasso} (nonzero $L_1$) & 245 & 117 & 99.55\% & 99.79\% \\
+Filter   & \texttt{filter\_ttest} (Welch's $t$-test) & 23,551 & 6,498 & 56.93\% & 88.12\% \\
+Filter   & \texttt{filter\_anova} (ANOVA $F$-test) & 23,577 & 3,066 & 56.88\% & 94.39\% \\
+Filter   & \texttt{filter\_fdr\_ranked} (BH-FDR ranked) & 19,132 & 2 & 65.01\% & $\approx$100\% \\
+Wrapper  & \texttt{wrapper\_svm} (RFE to $n_{\mathrm{train}}$) & 96 & 97 & 99.82\% & 99.82\% \\
+Embedded & \texttt{wrapper\_rf} (importance $>$ mean) & 273 & 318 & 99.50\% & 99.42\% \\
+Embedded & \texttt{wrapper\_xgb} (XGBoost gain $>$ mean) & 41 & 45 & 99.93\% & 99.92\% \\
+Embedded & \texttt{embedded\_lasso} (nonzero $L_1$) & 37 & 47 & 99.93\% & 99.91\% \\
 \bottomrule
 \end{tabular}
 }
@@ -61,13 +61,13 @@ Table~\ref{tab:gse19804_probes} reports the retained-probe counts for each metho
 \toprule
 \textbf{Method} & \textbf{Probes retained} & \textbf{Reduction} \\
 \midrule
-Welch's $t$-test & 25,695 & 53.00\% \\
-ANOVA $F$-test & 25,707 & 52.98\% \\
-FDR-ranked & 21,858 & 60.02\% \\
-SVM-RFE (RFE to $n_{\mathrm{train}}$) & 120 & 99.78\% \\
-RF importance ($>$ mean) & 333 & 99.39\% \\
-XGBoost gain ($>$ mean) & 46 & 99.92\% \\
-LASSO (nonzero $L_1$) & 245 & 99.55\% \\
+Welch's $t$-test & 23,551 & 56.93\% \\
+ANOVA $F$-test & 23,577 & 56.88\% \\
+FDR-ranked & 19,132 & 65.01\% \\
+SVM-RFE (RFE to $n_{\mathrm{train}}$) & 96 & 99.82\% \\
+RF importance ($>$ mean) & 273 & 99.50\% \\
+XGBoost gain ($>$ mean) & 41 & 99.93\% \\
+LASSO (nonzero $L_1$) & 37 & 99.93\% \\
 \bottomrule
 \end{tabular}
 \end{table}
@@ -105,13 +105,13 @@ On the imbalanced GSE42568 breast cancer dataset, 54,675 probes were evaluated a
 \toprule
 \textbf{Method} & \textbf{Probes retained} & \textbf{Reduction} \\
 \midrule
-Welch's $t$-test & 6,706 & 87.73\% \\
-ANOVA $F$-test & 3,217 & 94.12\% \\
-FDR-ranked & 2 & 100.00\% \\
-SVM-RFE (RFE to $n_{\mathrm{train}}$) & 121 & 99.78\% \\
-RF importance ($>$ mean) & 415 & 99.24\% \\
-XGBoost gain ($>$ mean) & 61 & 99.89\% \\
-LASSO (nonzero $L_1$) & 117 & 99.79\% \\
+Welch's $t$-test & 6,498 & 88.12\% \\
+ANOVA $F$-test & 3,066 & 94.39\% \\
+FDR-ranked & 2 & $\approx$100\% \\
+SVM-RFE (RFE to $n_{\mathrm{train}}$) & 97 & 99.82\% \\
+RF importance ($>$ mean) & 318 & 99.42\% \\
+XGBoost gain ($>$ mean) & 45 & 99.92\% \\
+LASSO (nonzero $L_1$) & 47 & 99.91\% \\
 \bottomrule
 \end{tabular}
 \end{table}
@@ -151,8 +151,8 @@ Table~\ref{tab:cross_dataset_consensus} summarises the retained-probe counts amo
 \toprule
 \textbf{Summary (filter methods only)} & \textbf{GSE19804 (Balanced)} & \textbf{GSE42568 (Imbalanced)} \\
 \midrule
-Smallest retained set & 21,858 (BH-FDR) & 2 (BH-FDR) \\
-Largest retained set & 25,707 (ANOVA) & 6,706 (Welch $t$-test) \\
+Smallest retained set & 19,132 (BH-FDR) & 2 (BH-FDR) \\
+Largest retained set & 23,577 (ANOVA) & 6,498 (Welch $t$-test) \\
 \bottomrule
 \end{tabular}
 \end{table}
